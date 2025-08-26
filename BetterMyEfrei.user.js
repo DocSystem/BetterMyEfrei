@@ -1,9 +1,9 @@
 // ==UserScript==
 // @name         Better MyEfrei
 // @namespace    https://www.myefrei.fr/
-// @version      0.4.4
+// @version      0.4.5
 // @description  some improvements to MyEfrei UI!
-// @author       DocSystem & Doryan D.
+// @author       DocSystem & Doryan D. & Mathu_lmn & Mat15
 // @match        https://www.myefrei.fr/portal/student/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=www.myefrei.fr
 // @grant        none
@@ -31,6 +31,24 @@
     }
     .rbc-header.rbc-today button {
       background-color: transparent !important; /* garde le bouton neutre */
+    }
+    /* Couleur de fond pour la semaine actuelle dans le mini calendrier */
+    .cjVoqR .MuiPickersLayout-root .MuiPickersDay-today {
+    background-color: #c4e5ff;
+    }
+    .cjVoqR .MuiPickersLayout-root .Mui-selected{
+    background-color: #c4e5ff;
+    }
+    .cjVoqR .MuiPickersLayout-root .MuiDayCalendar-weekContainer:has(> .Mui-selected) {
+    background-color: #edf3f8;
+    }
+
+    /* Couleur de l'onglet sélectionné */
+    .kZfKAP.Mui-selected{
+    color: rgb(31 54 100);
+    }
+    .lnFlqe{
+    background-color: rgb(31 54 100);
     }
   `;
         document.head.appendChild(css);
@@ -77,7 +95,7 @@
             hover: '#E9D8FF',
             active: '#DBC0FF',
             border: '#C198F8',
-            chipColor: '#000000'
+            chipColor: '#FFFFFF'
         }
     };
     CALENDAR_EVENT_COLORS.CTD = CALENDAR_EVENT_COLORS.TD;
@@ -519,6 +537,7 @@
   .bme-hide { display:none !important; }
 
   /* Header : chip + titre, puis code module juste dessous */
+  .bme-chip {font-weight:bold;}
   .bme-header { display:flex; flex-direction:column; gap:6px; margin-top:4px; margin-bottom:12px; }
   .bme-header-top { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
   .bme-title-text { margin:0; line-height:1.2; }
