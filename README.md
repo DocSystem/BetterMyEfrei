@@ -8,9 +8,10 @@ UI/UX tweaks for MyEfrei
 3. Left-click "Manage Extension."
 4. Enable "Developer Mode."
 5. Enable "Allow user scripts."
-6. One-click install: Click this link to Install Better MyEfrei directly: [Install Better MyEfrei](https://github.com/DocSystem/BetterMyEfrei/raw/refs/heads/main/BetterMyEfrei.user.js)
-TamperMonkey will automatically detect the userscript and prompt you to Install it.
-7. Refresh the [myefrei.fr](https://myefrei.fr) webpage.
+6. **One-click install**: Click this link to Install Better MyEfrei directly: [**Install Better MyEfrei**](https://github.com/DocSystem/BetterMyEfrei/raw/refs/heads/main/BetterMyEfrei.user.js)
+
+   TamperMonkey will automatically detect the userscript and prompt you to Install it.
+8. Refresh the [myefrei.fr](https://myefrei.fr) webpage.
 
 ## Changes
 
