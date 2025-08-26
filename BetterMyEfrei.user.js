@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Better MyEfrei
 // @namespace    https://www.myefrei.fr/
-// @version      0.4.2
+// @version      0.4.3
 // @description  some improvements to MyEfrei UI!
 // @author       DocSystem & Doryan D.
 // @match        https://www.myefrei.fr/portal/student/*
@@ -97,73 +97,70 @@
     }
 
     // === Better MyEfrei — Legend enhancer ===
-    (function () {
-        const LEGEND_CSS_ID = 'bme-legend-css';
-        if (!document.querySelector(`#${LEGEND_CSS_ID}`)) {
-            const css = document.createElement('style');
-            css.id = LEGEND_CSS_ID;
-            css.textContent = `
-      .bme-legend-item { display:flex; align-items:center; gap:12px; margin:12px 0; }
-      .bme-legend-dot  { width:14px; height:14px; border-radius:50%; flex:0 0 14px; }
-    `;
-            document.head.appendChild(css);
-        }
+    const LEGEND_CSS_ID = 'bme-legend-css';
+    if (!document.querySelector(`#${LEGEND_CSS_ID}`)) {
+        const css = document.createElement('style');
+        css.id = LEGEND_CSS_ID;
+        css.textContent = `
+    .bme-legend-item { display:flex; align-items:center; gap:12px; margin:12px 0; }
+    .bme-legend-dot  { width:14px; height:14px; border-radius:50%; flex:0 0 14px; }
+`;
+        document.head.appendChild(css);
+    }
 
-        // Libellés corrigés
-        const COURSE_TYPES = [
-            ['CM',  'CM (Cours magistral)'],
-            ['CTD', 'CTD (Cours TD)'],
-            ['TD',  'TD (Travaux dirigés)'],
-            ['CTP', 'CTP (Cours TP)'],
-            ['TP',  'TP (Travaux pratiques)'],
-            ['PRJ', 'PRJ (Projet)'],
-            ['TPA', 'TPA (Travaux pratiques en autonomie)'],
-            ['IE',  'IE (Intervention Entreprise)'],
-        ];
+    // Libellés corrigés
+    const COURSE_TYPES = [
+        ['CM',  'CM (Cours magistral)'],
+        ['CTD', 'CTD (Cours TD)'],
+        ['TD',  'TD (Travaux dirigés)'],
+        ['CTP', 'CTP (Cours TP)'],
+        ['TP',  'TP (Travaux pratiques)'],
+        ['PRJ', 'PRJ (Projet)'],
+        ['TPA', 'TPA (Travaux pratiques en autonomie)'],
+        ['IE',  'IE (Intervention Entreprise)'],
+    ];
 
-        const EXAM_COLOR = '#FF7EB8';
+    const EXAM_COLOR = '#FF7EB8';
 
-        function makeLegendItem(label, color) {
-            const div = document.createElement('div');
-            div.className = 'sc-dZeWys type-item MuiBox-root bme-legend-item';
-            const dot = document.createElement('span');
-            dot.className = 'bme-legend-dot';
-            dot.style.background = color;
-            const p = document.createElement('p');
-            p.className = 'sc-bczRLJ gLvYgE MuiTypography-root MuiTypography-body1';
-            p.textContent = label;
-            div.appendChild(dot);
-            div.appendChild(p);
-            return div;
-        }
+    function makeLegendItem(label, color) {
+        const div = document.createElement('div');
+        div.className = 'sc-dZeWys type-item MuiBox-root bme-legend-item';
+        const dot = document.createElement('span');
+        dot.className = 'bme-legend-dot';
+        dot.style.background = color;
+        const p = document.createElement('p');
+        p.className = 'sc-bczRLJ gLvYgE MuiTypography-root MuiTypography-body1';
+        p.textContent = label;
+        div.appendChild(dot);
+        div.appendChild(p);
+        return div;
+    }
 
-        function enhanceLegend() {
-            const cards = Array.from(document.querySelectorAll('.kNTodg.inHGSN, .kNTodg, .inHGSN'));
-            const panel = cards.find(c => c.querySelector('h2')?.textContent?.trim().toLowerCase().includes('types d’évènements'));
-            if (!panel || panel.getAttribute('data-bme-legend') === '1') return;
+    function enhanceLegend() {
+        const cards = Array.from(document.querySelectorAll('.kNTodg.inHGSN, .kNTodg, .inHGSN'));
+        const panel = cards.find(c => c.querySelector('h2')?.textContent?.trim().toLowerCase().includes('types d’évènements'));
+        if (!panel || panel.getAttribute('data-bme-legend') === '1') return;
 
-            // 1) Supprimer les items natifs qu'on ne veut pas
-            panel.querySelectorAll('.type-item.course').forEach(n => n.remove());
-            panel.querySelectorAll('.type-item.event').forEach(n => n.remove());  // pas d'« Évènement »
-            panel.querySelectorAll('.type-item.exam').forEach(n => n.remove());   // supprime l'existant pour éviter la pastille en double
+        // 1) Supprimer les items natifs qu'on ne veut pas
+        panel.querySelectorAll('.type-item.course').forEach(n => n.style.display = 'none');
+        panel.querySelectorAll('.type-item.event').forEach(n => n.style.display = 'none');
+        panel.querySelectorAll('.type-item.exam').forEach(n => n.style.display = 'none');
 
-            // 2) Ajouter nos types de cours (couleur = border de CALENDAR_EVENT_COLORS)
-            COURSE_TYPES.forEach(([key, label]) => {
-                const color = (CALENDAR_EVENT_COLORS?.[key]?.border) || '#0163DD';
-                panel.appendChild(makeLegendItem(label, color));
-            });
+        // 2) Ajouter nos types de cours (couleur = border de CALENDAR_EVENT_COLORS)
+        COURSE_TYPES.forEach(([key, label]) => {
+            const color = (CALENDAR_EVENT_COLORS?.[key]?.border) || '#0163DD';
+            panel.appendChild(makeLegendItem(label, color));
+        });
 
-            // 3) Ajouter « Examen » proprement, aligné comme les autres
-            panel.appendChild(makeLegendItem('Examen', EXAM_COLOR));
+        // 3) Ajouter « Examen » proprement, aligné comme les autres
+        panel.appendChild(makeLegendItem('Examen', EXAM_COLOR));
 
-            panel.setAttribute('data-bme-legend', '1');
-        }
+        panel.setAttribute('data-bme-legend', '1');
+    }
 
-        const obs = new MutationObserver(enhanceLegend);
-        obs.observe(document.documentElement, { childList:true, subtree:true });
-        enhanceLegend();
-    })();
-
+    const obs = new MutationObserver(enhanceLegend);
+    obs.observe(document.documentElement, { childList:true, subtree:true });
+    enhanceLegend();
 
     function whenItemLoaded(item, callback) {
         // If item already exists, run callback immediately
@@ -245,6 +242,18 @@
 
         function processCalendar() {
             if (document.location.pathname !== '/portal/student/planning') return;
+
+            // get the MuiContainer-root[role="title"] element and remove the inner element margin top and bottom
+            const title = document.querySelector('.MuiContainer-root[role="title"]');
+            if (title) {
+                title.style.marginTop = '0';
+                const inner = title.querySelector('h1');
+                if (inner) {
+                    inner.style.marginTop = '0';
+                    inner.style.marginBottom = '0';
+                    inner.style.fontSize = '25px';
+                }
+            }
             const headers = document.querySelector(".rbc-time-header-content > .rbc-time-header-cell").querySelectorAll(".rbc-header");
             if (headers.length === 7) {
                 headers[6].style.display = 'none';
@@ -355,109 +364,68 @@
         });
     });
 
-    // === Better MyEfrei — Nettoyage en-tête Planning & remontée des blocs ===
-    (function () {
-        const CSS_ID = 'bme-planning-cleanup';
-        if (!document.querySelector('#' + CSS_ID)) {
-            const css = document.createElement('style');
-            css.id = CSS_ID;
-            css.textContent = `
-      /* 1) Cacher uniquement le titre "Planning" */
-      .MuiContainer-root[role="title"] { display: none !important; }
-
-      /* 2) Remonter les sections principales (colonne de gauche + calendrier) */
-      .sc-dZeWys.cGYehn.MuiBox-root,
-      .sc-jnWwQn.omXKR { margin-top: 0 !important; }
-
-      /* 3) Compacter la barre d’outils du calendrier */
-      .sc-laFCIP.gtqZmr { margin-top: 0 !important; }
-    `;
-            document.head.appendChild(css);
-        }
-
-        function cleanupPlanning() {
-            // Supprime seulement le titre
-            document.querySelector('.MuiContainer-root[role="title"]')?.remove();
-
-            // Aligne les colonnes en haut si leur parent est en flex
-            const leftCol = document.querySelector('.sc-dZeWys.cGYehn.MuiBox-root');
-            const calWrap = document.querySelector('.sc-jnWwQn.omXKR');
-            const parent = leftCol?.parentElement || calWrap?.parentElement;
-            if (parent) parent.style.alignItems = 'flex-start';
-        }
-
-        // Au chargement + si la page re-render
-        cleanupPlanning();
-        const mo = new MutationObserver(cleanupPlanning);
-        mo.observe(document.body, { childList: true, subtree: true });
-    })();
-
     // === Better MyEfrei — Déplacer SEULEMENT l’alerte iCal tout en bas (page planning) ===
-    (function () {
-        // Ne rien faire hors /planning
-        const isPlanning = () => location.pathname === '/portal/student/planning';
-        if (!isPlanning()) return;
+    if (location.pathname !== '/portal/student/planning') return;
 
-        // CSS pour garder les boutons à droite sur une ligne (uniquement pour notre alerte iCal)
-        const CSS_ID = 'bme-ical-inline-css';
-        if (!document.getElementById(CSS_ID)) {
-            const css = document.createElement('style');
-            css.id = CSS_ID;
-            css.textContent = `
-      .bme-ical-alert .MuiAlert-message { display: flex; align-items: center; }
-      .bme-ical-alert .MuiAlert-action { margin-left: auto; white-space: nowrap; }
-      .bme-ical-alert .MuiButton-root { white-space: nowrap; }
-    `;
-            document.head.appendChild(css);
+    // CSS pour garder les boutons à droite sur une ligne (uniquement pour notre alerte iCal)
+    const CSS_ID = 'bme-ical-inline-css';
+    if (!document.getElementById(CSS_ID)) {
+        const css = document.createElement('style');
+        css.id = CSS_ID;
+        css.textContent = `
+    .bme-ical-alert .MuiAlert-message { display: flex; align-items: center; }
+    .bme-ical-alert .MuiAlert-action { margin-left: auto; white-space: nowrap; }
+    .bme-ical-alert .MuiButton-root { white-space: nowrap; }
+`;
+        document.head.appendChild(css);
+    }
+
+    const WRAPPER_SEL = '.sc-bkrxz.dUSWYm'; // conteneur principal de la page planning
+    const MOVED_ATTR  = 'data-bme-ical-moved';
+
+    function findIcalAlert() {
+        // On cible uniquement l’alerte iCal (texte + bouton/lien iCal)
+        const alerts = Array.from(document.querySelectorAll('.MuiAlert-root[role="alert"]'));
+        return alerts.find(a => {
+            const txt = (a.textContent || '').toLowerCase();
+            const hasIcalWords = /ical|télécharger au format ical|copier url ical|utc/.test(txt);
+            const hasIcalLink =
+                    a.querySelector('a[href*=".ics"], a[href*="ical"]') ||
+                    a.querySelector('a[href*="/api/"][href*="/student/planning/"]');
+            return hasIcalWords && hasIcalLink;
+        }) || null;
+    }
+
+    function moveIcalAlert() {
+        if (location.pathname !== '/portal/student/planning') return;
+        const alert = findIcalAlert();
+        if (!alert) return;
+
+        // Marqueur + classe pour CSS spécifique
+        alert.classList.add('bme-ical-alert');
+
+        if (alert.getAttribute(MOVED_ATTR) === '1') return;
+
+        const wrapper =
+                alert.closest(WRAPPER_SEL) ||
+                document.querySelector(WRAPPER_SEL);
+
+        if (!wrapper) return;
+
+        // Place l’alerte tout en bas du wrapper (sans toucher la structure interne)
+        if (wrapper.lastElementChild !== alert) {
+            wrapper.appendChild(alert);
         }
 
-        const WRAPPER_SEL = '.sc-bkrxz.dUSWYm'; // conteneur principal de la page planning
-        const MOVED_ATTR  = 'data-bme-ical-moved';
+        alert.setAttribute(MOVED_ATTR, '1');
+    }
 
-        function findIcalAlert() {
-            // On cible uniquement l’alerte iCal (texte + bouton/lien iCal)
-            const alerts = Array.from(document.querySelectorAll('.MuiAlert-root[role="alert"]'));
-            return alerts.find(a => {
-                const txt = (a.textContent || '').toLowerCase();
-                const hasIcalWords = /ical|télécharger au format ical|copier url ical|utc/.test(txt);
-                const hasIcalLink =
-                      a.querySelector('a[href*=".ics"], a[href*="ical"]') ||
-                      a.querySelector('a[href*="/api/"][href*="/student/planning/"]');
-                return hasIcalWords && hasIcalLink;
-            }) || null;
-        }
+    // Au chargement
+    moveIcalAlert();
 
-        function moveIcalAlert() {
-            if (!isPlanning()) return; // sécurité supplémentaire
-            const alert = findIcalAlert();
-            if (!alert) return;
-
-            // Marqueur + classe pour CSS spécifique
-            alert.classList.add('bme-ical-alert');
-
-            if (alert.getAttribute(MOVED_ATTR) === '1') return;
-
-            const wrapper =
-                  alert.closest(WRAPPER_SEL) ||
-                  document.querySelector(WRAPPER_SEL);
-
-            if (!wrapper) return;
-
-            // Place l’alerte tout en bas du wrapper (sans toucher la structure interne)
-            if (wrapper.lastElementChild !== alert) {
-                wrapper.appendChild(alert);
-            }
-
-            alert.setAttribute(MOVED_ATTR, '1');
-        }
-
-        // Au chargement
-        moveIcalAlert();
-
-        // Si React réinsère l’alerte ailleurs pendant la navigation interne, on la remet en bas
-        const mo = new MutationObserver(() => moveIcalAlert());
-        mo.observe(document.body, { childList: true, subtree: true });
-    })();
+    // Si React réinsère l’alerte ailleurs pendant la navigation interne, on la remet en bas
+    const mo = new MutationObserver(() => moveIcalAlert());
+    mo.observe(document.body, { childList: true, subtree: true });
 
     whenItemLoaded('.MuiContainer-root', (main) => {
         function processMain() {
@@ -802,7 +770,7 @@
         grid.appendChild(buildField({ label: 'Salle', icon: BME_ICONS.room, contentHTML: roomHTML }));
 
         const groupsHTML = (groupsInfo.values.length)
-        ? groupsInfo.values.map(g => `<span class="MuiTypography-root MuiTypography-body1">${g}</span>`).join('')
+        ? groupsInfo.values.map(g => `<span class="MuiTypography-root MuiTypography-body1"><b>${g}</b></span>`).join('')
         : '';
         grid.appendChild(buildField({ label: 'Groupe', icon: BME_ICONS.group, contentHTML: groupsHTML }));
 
@@ -815,6 +783,4 @@
 
         contentHost.insertBefore(grid, header.nextSibling);
     }
-
-
 })();
