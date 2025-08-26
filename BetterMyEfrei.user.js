@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Better MyEfrei
 // @namespace    https://www.myefrei.fr/
-// @version      0.4.3
+// @version      0.4.4
 // @description  some improvements to MyEfrei UI!
 // @author       DocSystem & Doryan D.
 // @match        https://www.myefrei.fr/portal/student/*
@@ -246,13 +246,7 @@
             // get the MuiContainer-root[role="title"] element and remove the inner element margin top and bottom
             const title = document.querySelector('.MuiContainer-root[role="title"]');
             if (title) {
-                title.style.marginTop = '0';
-                const inner = title.querySelector('h1');
-                if (inner) {
-                    inner.style.marginTop = '0';
-                    inner.style.marginBottom = '0';
-                    inner.style.fontSize = '25px';
-                }
+                title.style.display = 'none';
             }
             const headers = document.querySelector(".rbc-time-header-content > .rbc-time-header-cell").querySelectorAll(".rbc-header");
             if (headers.length === 7) {
@@ -364,68 +358,70 @@
         });
     });
 
-    // === Better MyEfrei — Déplacer SEULEMENT l’alerte iCal tout en bas (page planning) ===
-    if (location.pathname !== '/portal/student/planning') return;
-
-    // CSS pour garder les boutons à droite sur une ligne (uniquement pour notre alerte iCal)
-    const CSS_ID = 'bme-ical-inline-css';
-    if (!document.getElementById(CSS_ID)) {
-        const css = document.createElement('style');
-        css.id = CSS_ID;
-        css.textContent = `
-    .bme-ical-alert .MuiAlert-message { display: flex; align-items: center; }
-    .bme-ical-alert .MuiAlert-action { margin-left: auto; white-space: nowrap; }
-    .bme-ical-alert .MuiButton-root { white-space: nowrap; }
-`;
-        document.head.appendChild(css);
-    }
-
-    const WRAPPER_SEL = '.sc-bkrxz.dUSWYm'; // conteneur principal de la page planning
-    const MOVED_ATTR  = 'data-bme-ical-moved';
-
-    function findIcalAlert() {
-        // On cible uniquement l’alerte iCal (texte + bouton/lien iCal)
-        const alerts = Array.from(document.querySelectorAll('.MuiAlert-root[role="alert"]'));
-        return alerts.find(a => {
-            const txt = (a.textContent || '').toLowerCase();
-            const hasIcalWords = /ical|télécharger au format ical|copier url ical|utc/.test(txt);
-            const hasIcalLink =
-                    a.querySelector('a[href*=".ics"], a[href*="ical"]') ||
-                    a.querySelector('a[href*="/api/"][href*="/student/planning/"]');
-            return hasIcalWords && hasIcalLink;
-        }) || null;
-    }
-
-    function moveIcalAlert() {
+    whenItemLoaded('.alert-wrapper', (main) => {
+        // === Better MyEfrei — Déplacer SEULEMENT l’alerte iCal tout en bas (page planning) ===
         if (location.pathname !== '/portal/student/planning') return;
-        const alert = findIcalAlert();
-        if (!alert) return;
-
-        // Marqueur + classe pour CSS spécifique
-        alert.classList.add('bme-ical-alert');
-
-        if (alert.getAttribute(MOVED_ATTR) === '1') return;
-
-        const wrapper =
-                alert.closest(WRAPPER_SEL) ||
-                document.querySelector(WRAPPER_SEL);
-
-        if (!wrapper) return;
-
-        // Place l’alerte tout en bas du wrapper (sans toucher la structure interne)
-        if (wrapper.lastElementChild !== alert) {
-            wrapper.appendChild(alert);
+        // CSS pour garder les boutons à droite sur une ligne (uniquement pour notre alerte iCal)
+        const CSS_ID = 'bme-ical-inline-css';
+        if (!document.getElementById(CSS_ID)) {
+            const css = document.createElement('style');
+            css.id = CSS_ID;
+            css.textContent = `
+        .bme-ical-alert .MuiAlert-message { display: flex; align-items: center; }
+        .bme-ical-alert .MuiAlert-action { margin-left: auto; white-space: nowrap; }
+        .bme-ical-alert .MuiButton-root { white-space: nowrap; }
+    `;
+            document.head.appendChild(css);
         }
+    
+        const WRAPPER_SEL = '.sc-bkrxz.dUSWYm'; // conteneur principal de la page planning
+        const MOVED_ATTR = 'data-bme-ical-moved';
+    
+        function findIcalAlert() {
+            // On cible uniquement l’alerte iCal (texte + bouton/lien iCal)
+            const alerts = Array.from(document.querySelectorAll('.MuiAlert-root[role="alert"]'));
+            return alerts.find(a => {
+                const txt = (a.textContent || '').toLowerCase();
+                const hasIcalWords = /ical|télécharger au format ical|copier url ical|utc/.test(txt);
+                const hasIcalLink =
+                        a.querySelector('a[href*=".ics"], a[href*="ical"]') ||
+                        a.querySelector('a[href*="/api/"][href*="/student/planning/"]');
+                return hasIcalWords && hasIcalLink;
+            }) || null;
+        }
+    
+        function moveIcalAlert() {
+            if (location.pathname !== '/portal/student/planning') return;
+            const alert = findIcalAlert();
+            if (!alert) return;
+    
+            // Marqueur + classe pour CSS spécifique
+            alert.classList.add('bme-ical-alert');
+    
+            if (alert.getAttribute(MOVED_ATTR) === '1') return;
+    
+            const wrapper =
+                    alert.closest(WRAPPER_SEL) ||
+                    document.querySelector(WRAPPER_SEL);
+    
+            if (!wrapper) return;
+    
+            // Place l’alerte tout en bas du wrapper (sans toucher la structure interne)
+            if (wrapper.lastElementChild !== alert) {
+                wrapper.appendChild(alert);
+            }
+    
+            alert.setAttribute(MOVED_ATTR, '1');
+        }
+    
+        // Au chargement
+        moveIcalAlert();
+    
+        // Si React réinsère l’alerte ailleurs pendant la navigation interne, on la remet en bas
+        const mo = new MutationObserver(() => moveIcalAlert());
+        mo.observe(document.body, { childList: true, subtree: true });
+    });
 
-        alert.setAttribute(MOVED_ATTR, '1');
-    }
-
-    // Au chargement
-    moveIcalAlert();
-
-    // Si React réinsère l’alerte ailleurs pendant la navigation interne, on la remet en bas
-    const mo = new MutationObserver(() => moveIcalAlert());
-    mo.observe(document.body, { childList: true, subtree: true });
 
     whenItemLoaded('.MuiContainer-root', (main) => {
         function processMain() {
@@ -676,7 +672,7 @@
         if (chip) {
             chip.classList.add('bme-chip', `course-${typeText}`, 'chip-color');
             const lbl = chip.querySelector('.MuiChip-label');
-            if (lbl) lbl.textContent = typeText;      // remplace "COURS" par "CM"/"TD"/...
+            if (lbl) lbl.textContent = typeText; // remplace "COURS" par "CM"/"TD"/...
         } else {
             // Chip manquant : on le crée
             chip = document.createElement('div');
@@ -764,9 +760,15 @@
         grid.appendChild(buildField({ label: 'Horaires', icon: BME_ICONS.time, contentHTML: timeHTML }));
 
         let roomHTML = '';
-        if (/présentiel/i.test(modalityText))        { if (roomBlock) roomHTML = roomBlock.innerHTML; }
-        else if (/distanciel|visio/i.test(modalityText)) { roomHTML = `${BME_ICONS.video}<span><b>Distanciel</b></span>`; }
-        else if (roomBlock)                           { roomHTML = roomBlock.innerHTML; }
+        if (/présentiel/i.test(modalityText)) {
+            if (roomBlock) roomHTML = roomBlock.innerHTML;
+        }
+        else if (/distanciel|visio/i.test(modalityText)) {
+            roomHTML = `${BME_ICONS.video}<span><b>Distanciel</b></span>`;
+        }
+        else if (roomBlock) {
+            roomHTML = roomBlock.innerHTML;
+        }
         grid.appendChild(buildField({ label: 'Salle', icon: BME_ICONS.room, contentHTML: roomHTML }));
 
         const groupsHTML = (groupsInfo.values.length)
