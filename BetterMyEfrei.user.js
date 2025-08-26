@@ -1,13 +1,14 @@
 // ==UserScript==
 // @name         Better MyEfrei
 // @namespace    https://www.myefrei.fr/
-// @version      0.4.0
+// @version      0.4.1
 // @description  some improvements to MyEfrei UI!
 // @author       DocSystem & Doryan D.
 // @match        https://www.myefrei.fr/portal/student/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=www.myefrei.fr
 // @grant        none
 // @updateURL    https://github.com/DocSystem/BetterMyEfrei/raw/refs/heads/main/BetterMyEfrei.user.js
+// @downloadURL  https://github.com/DocSystem/BetterMyEfrei/raw/refs/heads/main/BetterMyEfrei.user.js
 // ==/UserScript==
 
 (function() {
