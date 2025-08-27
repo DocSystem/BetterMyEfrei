@@ -50,6 +50,14 @@
     .lnFlqe{
     background-color: rgb(31 54 100);
     }
+    
+    /* Couleur de la chip étudiant du header */
+    .kgcaCY {
+    border: 1px solid #cae4fc;
+    }
+    .kgcaCY::before {
+    background: rgb(202 228 252);
+    }
   `;
         document.head.appendChild(css);
     }
