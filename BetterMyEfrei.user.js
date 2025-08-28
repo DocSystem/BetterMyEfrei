@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Better MyEfrei
 // @namespace    https://www.myefrei.fr/
-// @version      0.4.5
+// @version      0.4.6
 // @description  some improvements to MyEfrei UI!
 // @author       DocSystem & Doryan D. & Mathu_lmn & Mat15
 // @match        https://www.myefrei.fr/portal/student/*
@@ -58,6 +58,11 @@
     .kgcaCY::before {
     background: rgb(202 228 252);
     }
+        
+    /* Couleur du samedi */
+    .eQtWss .rbc-time-view .rbc-time-column:nth-child(7), .eQtWss .rbc-time-view .rbc-time-column:nth-child(8) {
+    background-color: rgb(255 255 255);
+}
   `;
         document.head.appendChild(css);
     }
