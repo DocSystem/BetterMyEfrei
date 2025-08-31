@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Better MyEfrei
 // @namespace    https://www.myefrei.fr/
-// @version      0.4.6
+// @version      0.4.7
 // @description  some improvements to MyEfrei UI!
 // @author       DocSystem & Doryan D. & Mathu_lmn & Mat15
 // @match        https://www.myefrei.fr/portal/student/*
@@ -50,7 +50,7 @@
     .lnFlqe{
     background-color: rgb(31 54 100);
     }
-    
+
     /* Couleur de la chip étudiant du header */
     .kgcaCY {
     border: 1px solid #cae4fc;
@@ -58,11 +58,16 @@
     .kgcaCY::before {
     background: rgb(202 228 252);
     }
-        
+
     /* Couleur du samedi */
     .eQtWss .rbc-time-view .rbc-time-column:nth-child(7), .eQtWss .rbc-time-view .rbc-time-column:nth-child(8) {
     background-color: rgb(255 255 255);
+
+    /* Suppression cases inutiles*/
+.eQtWss .rbc-time-view .rbc-time-gutter:nth-child(-n+6) {
+  display: none;
 }
+
   `;
         document.head.appendChild(css);
     }
@@ -112,6 +117,7 @@
         }
     };
     CALENDAR_EVENT_COLORS.CTD = CALENDAR_EVENT_COLORS.TD;
+    CALENDAR_EVENT_COLORS.TD20 = CALENDAR_EVENT_COLORS.TD;
     CALENDAR_EVENT_COLORS.CTP = CALENDAR_EVENT_COLORS.TP;
     for (let key of Object.keys(CALENDAR_EVENT_COLORS)) {
         CUSTOM_CSS += `.course.course-${key}:not(.chip-color) { background-color: ${CALENDAR_EVENT_COLORS[key].normal} !important; }`;
@@ -143,6 +149,7 @@
     const COURSE_TYPES = [
         ['CM',  'CM (Cours magistral)'],
         ['CTD', 'CTD (Cours TD)'],
+        ['TD20', 'TD20 (TD par groupes de 20)'],
         ['TD',  'TD (Travaux dirigés)'],
         ['CTP', 'CTP (Cours TP)'],
         ['TP',  'TP (Travaux pratiques)'],
@@ -453,6 +460,62 @@
         mo.observe(document.body, { childList: true, subtree: true });
     });
 
+whenItemLoaded('p.MuiTypography-body2', () => {
+    if (location.pathname !== '/portal/student/planning') return;
+
+    const WRAPPER_SEL = '.sc-bkrxz.dUSWYm';
+    const MIRROR_ID = 'bme-sync-mirror';
+    const ORIGINAL_ATTR = 'data-bme-hidden';
+
+    function ensureMirror() {
+        let mirror = document.getElementById(MIRROR_ID);
+        if (!mirror) {
+            const wrapper = document.querySelector(WRAPPER_SEL);
+            if (!wrapper) return null;
+            mirror = document.createElement('p');
+            mirror.id = MIRROR_ID;
+            mirror.className = 'MuiTypography-root MuiTypography-body2';
+            mirror.style.opacity = '0.8';
+            mirror.style.fontStyle = 'italic';
+            mirror.style.marginTop = '1rem';
+            wrapper.appendChild(mirror);
+        }
+        return mirror;
+    }
+
+    function findOriginal() {
+        return Array.from(document.querySelectorAll('p.MuiTypography-body2'))
+            .find(p => (p.textContent || '').toLowerCase().includes('dernière synchro.'));
+    }
+
+    function syncMirror() {
+        const original = findOriginal();
+        const mirror = ensureMirror();
+        if (!original || !mirror) return;
+
+        // Copier le texte
+        mirror.textContent = original.textContent;
+
+        // Cacher l'original une seule fois
+        if (!original.hasAttribute(ORIGINAL_ATTR)) {
+            original.style.display = 'none';
+            original.setAttribute(ORIGINAL_ATTR, '1');
+        }
+    }
+
+    // Initialisation
+    syncMirror();
+
+    // Observer UNIQUEMENT le texte de l’original
+    const original = findOriginal();
+    if (original) {
+        const observer = new MutationObserver(() => syncMirror());
+        observer.observe(original, { childList: true, characterData: true, subtree: true });
+    }
+});
+
+
+
 
     whenItemLoaded('.MuiContainer-root', (main) => {
         function processMain() {
@@ -591,6 +654,10 @@
   }
   .bme-field-value > * { flex:0 0 auto; }
 
+  .bme-modal .MuiTypography-body1{
+  font-weight:normal;
+  }
+
   .bme-modal .MuiTypography-body1,
   .bme-modal .MuiTypography-body2 { line-height:1.35; margin:0; }
   `;
@@ -690,7 +757,7 @@
               modal.querySelector('h3.MuiTypography-root') ||
               modal.querySelector('h1.MuiTypography-root');
 
-        /* Détecter le type (CM/TD/TP/PRJ/IE/CTD/CTP) à partir du code module si possible */
+        /* Détecter le type (CM/TD/TP/PRJ/IE/CTD/TD20/CTP) à partir du code module si possible */
         const codeModuleNode = Array.from(modal.querySelectorAll('.MuiTypography-root, p, span, div'))
         .find(el => /^code module\s*:/i.test((el.textContent || '').trim()));
         const codeModuleRaw = codeModuleNode?.textContent || '';
@@ -714,7 +781,7 @@
 
         /* Masquer la ligne type longue (“CTD (Cours TD)” / “CM (Cours magistral)”) PARTOUT */
         Array.from(modal.querySelectorAll('.MuiTypography-root, .MuiTypography-body2, p, span, div'))
-            .filter(el => /\b(CM|TD|TP|CTD|CTP|PRJ|IE)\b\s*\(.+?\)/i.test((el.textContent || '').trim()))
+            .filter(el => /\b(CM|TD|TP|CTD|TD20|CTP|PRJ|IE)\b\s*\(.+?\)/i.test((el.textContent || '').trim()))
             .forEach(el => el.classList.add('bme-hide'));
 
         /* Header : chip + titre, puis code module sous le titre (sans parenthèses descriptives) */
@@ -773,8 +840,8 @@
                 const txt = (n.textContent || '').trim();
                 if (!txt) return false;
                 if (n.classList.contains('MuiChip-root')) return false;
-                if (/^\b(CM|TD|TP|CTD|CTP|PRJ|IE)\b$/i.test(txt)) return false;
-                if (/\b(CM|TD|TP|CTD|CTP|PRJ|IE)\b\s*\(.+?\)/i.test(txt)) return false;
+                if (/^\b(CM|TD|TP|CTD|TD20|CTP|PRJ|IE)\b$/i.test(txt)) return false;
+                if (/\b(CM|TD|TP|CTD|TD20|CTP|PRJ|IE)\b\s*\(.+?\)/i.test(txt)) return false;
                 return true;
             });
             teacherHTML = useful.map(n => n.outerHTML).join('');
