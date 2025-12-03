@@ -11,7 +11,7 @@
 // @downloadURL  https://github.com/DocSystem/BetterMyEfrei/raw/refs/heads/main/BetterMyEfrei.user.js
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     // Markers to avoid reprocessing
@@ -114,17 +114,26 @@
             active: '#DBC0FF',
             border: '#C198F8',
             chipColor: '#FFFFFF'
+        },
+        'COURS.LANGUE': {
+            normal: '#E2EFFF',
+            hover: '#CCE2FF',
+            active: '#92C1FB',
+            border: '#0163DD',
+            chipColor: '#FFFFFF'
         }
     };
     CALENDAR_EVENT_COLORS.CTD = CALENDAR_EVENT_COLORS.TD;
     CALENDAR_EVENT_COLORS.TD20 = CALENDAR_EVENT_COLORS.TD;
     CALENDAR_EVENT_COLORS.CTP = CALENDAR_EVENT_COLORS.TP;
+    CALENDAR_EVENT_COLORS.CLG = CALENDAR_EVENT_COLORS['COURS.LANGUE'];
     for (let key of Object.keys(CALENDAR_EVENT_COLORS)) {
-        CUSTOM_CSS += `.course.course-${key}:not(.chip-color) { background-color: ${CALENDAR_EVENT_COLORS[key].normal} !important; }`;
-        CUSTOM_CSS += `.course.course-${key}:not(.chip-color):hover { background-color: ${CALENDAR_EVENT_COLORS[key].hover} !important; }`;
-        CUSTOM_CSS += `.course.course-${key}:not(.chip-color):active { background-color: ${CALENDAR_EVENT_COLORS[key].active} !important; }`;
-        CUSTOM_CSS += `.course.course-${key}.event-border { border-color: ${CALENDAR_EVENT_COLORS[key].border} !important; }`;
-        CUSTOM_CSS += `.course.course-${key}.chip-color { background-color: ${CALENDAR_EVENT_COLORS[key].border} !important; color: ${CALENDAR_EVENT_COLORS[key].chipColor}; }`;
+        const safeKey = key.replace(/\./g, '\\.');
+        CUSTOM_CSS += `.course.course-${safeKey}:not(.chip-color) { background-color: ${CALENDAR_EVENT_COLORS[key].normal} !important; }`;
+        CUSTOM_CSS += `.course.course-${safeKey}:not(.chip-color):hover { background-color: ${CALENDAR_EVENT_COLORS[key].hover} !important; }`;
+        CUSTOM_CSS += `.course.course-${safeKey}:not(.chip-color):active { background-color: ${CALENDAR_EVENT_COLORS[key].active} !important; }`;
+        CUSTOM_CSS += `.course.course-${safeKey}.event-border { border-color: ${CALENDAR_EVENT_COLORS[key].border} !important; }`;
+        CUSTOM_CSS += `.course.course-${safeKey}.chip-color { background-color: ${CALENDAR_EVENT_COLORS[key].border} !important; color: ${CALENDAR_EVENT_COLORS[key].chipColor}; }`;
     }
     if (!document.querySelector(`#${CUSTOM_CSS_ID}`)) {
         const cssElem = document.createElement('style');
@@ -147,15 +156,16 @@
 
     // Libellés corrigés
     const COURSE_TYPES = [
-        ['CM',  'CM (Cours magistral)'],
+        ['CM', 'CM (Cours magistral)'],
         ['CTD', 'CTD (Cours TD)'],
         ['TD20', 'TD20 (TD par groupes de 20)'],
-        ['TD',  'TD (Travaux dirigés)'],
+        ['TD', 'TD (Travaux dirigés)'],
         ['CTP', 'CTP (Cours TP)'],
-        ['TP',  'TP (Travaux pratiques)'],
+        ['TP', 'TP (Travaux pratiques)'],
         ['PRJ', 'PRJ (Projet)'],
         ['TPA', 'TPA (Travaux pratiques en autonomie)'],
-        ['IE',  'IE (Intervention Entreprise)'],
+        ['IE', 'IE (Intervention Entreprise)'],
+        ['CLG', 'Cours de langue'],
     ];
 
     const EXAM_COLOR = '#FF7EB8';
@@ -197,7 +207,7 @@
     }
 
     const obs = new MutationObserver(enhanceLegend);
-    obs.observe(document.documentElement, { childList:true, subtree:true });
+    obs.observe(document.documentElement, { childList: true, subtree: true });
     enhanceLegend();
 
     function whenItemLoaded(item, callback) {
@@ -257,7 +267,9 @@
             console.log(eventData);
 
             if (eventData && chipElem) {
-                const newText = String(eventData.courseActivity ?? '').trim();
+                let newText = String(eventData.courseActivity ?? '').trim();
+                if (newText === 'COURS.LANGUE') newText = 'CLG';
+
                 // Only update if different to avoid unnecessary mutations
                 if (newText && chipElem.textContent !== newText) {
                     chipElem.textContent = newText;
@@ -411,10 +423,10 @@
     `;
             document.head.appendChild(css);
         }
-    
+
         const WRAPPER_SEL = '.sc-bkrxz.dUSWYm'; // conteneur principal de la page planning
         const MOVED_ATTR = 'data-bme-ical-moved';
-    
+
         function findIcalAlert() {
             // On cible uniquement l’alerte iCal (texte + bouton/lien iCal)
             const alerts = Array.from(document.querySelectorAll('.MuiAlert-root[role="alert"]'));
@@ -422,97 +434,97 @@
                 const txt = (a.textContent || '').toLowerCase();
                 const hasIcalWords = /ical|télécharger au format ical|copier url ical|utc/.test(txt);
                 const hasIcalLink =
-                        a.querySelector('a[href*=".ics"], a[href*="ical"]') ||
-                        a.querySelector('a[href*="/api/"][href*="/student/planning/"]');
+                    a.querySelector('a[href*=".ics"], a[href*="ical"]') ||
+                    a.querySelector('a[href*="/api/"][href*="/student/planning/"]');
                 return hasIcalWords && hasIcalLink;
             }) || null;
         }
-    
+
         function moveIcalAlert() {
             if (location.pathname !== '/portal/student/planning') return;
             const alert = findIcalAlert();
             if (!alert) return;
-    
+
             // Marqueur + classe pour CSS spécifique
             alert.classList.add('bme-ical-alert');
-    
+
             if (alert.getAttribute(MOVED_ATTR) === '1') return;
-    
+
             const wrapper =
-                    alert.closest(WRAPPER_SEL) ||
-                    document.querySelector(WRAPPER_SEL);
-    
+                alert.closest(WRAPPER_SEL) ||
+                document.querySelector(WRAPPER_SEL);
+
             if (!wrapper) return;
-    
+
             // Place l’alerte tout en bas du wrapper (sans toucher la structure interne)
             if (wrapper.lastElementChild !== alert) {
                 wrapper.appendChild(alert);
             }
-    
+
             alert.setAttribute(MOVED_ATTR, '1');
         }
-    
+
         // Au chargement
         moveIcalAlert();
-    
+
         // Si React réinsère l’alerte ailleurs pendant la navigation interne, on la remet en bas
         const mo = new MutationObserver(() => moveIcalAlert());
         mo.observe(document.body, { childList: true, subtree: true });
     });
 
-whenItemLoaded('p.MuiTypography-body2', () => {
-    if (location.pathname !== '/portal/student/planning') return;
+    whenItemLoaded('p.MuiTypography-body2', () => {
+        if (location.pathname !== '/portal/student/planning') return;
 
-    const WRAPPER_SEL = '.sc-bkrxz.dUSWYm';
-    const MIRROR_ID = 'bme-sync-mirror';
-    const ORIGINAL_ATTR = 'data-bme-hidden';
+        const WRAPPER_SEL = '.sc-bkrxz.dUSWYm';
+        const MIRROR_ID = 'bme-sync-mirror';
+        const ORIGINAL_ATTR = 'data-bme-hidden';
 
-    function ensureMirror() {
-        let mirror = document.getElementById(MIRROR_ID);
-        if (!mirror) {
-            const wrapper = document.querySelector(WRAPPER_SEL);
-            if (!wrapper) return null;
-            mirror = document.createElement('p');
-            mirror.id = MIRROR_ID;
-            mirror.className = 'MuiTypography-root MuiTypography-body2';
-            mirror.style.opacity = '0.8';
-            mirror.style.fontStyle = 'italic';
-            mirror.style.marginTop = '1rem';
-            wrapper.appendChild(mirror);
+        function ensureMirror() {
+            let mirror = document.getElementById(MIRROR_ID);
+            if (!mirror) {
+                const wrapper = document.querySelector(WRAPPER_SEL);
+                if (!wrapper) return null;
+                mirror = document.createElement('p');
+                mirror.id = MIRROR_ID;
+                mirror.className = 'MuiTypography-root MuiTypography-body2';
+                mirror.style.opacity = '0.8';
+                mirror.style.fontStyle = 'italic';
+                mirror.style.marginTop = '1rem';
+                wrapper.appendChild(mirror);
+            }
+            return mirror;
         }
-        return mirror;
-    }
 
-    function findOriginal() {
-        return Array.from(document.querySelectorAll('p.MuiTypography-body2'))
-            .find(p => (p.textContent || '').toLowerCase().includes('dernière synchro.'));
-    }
+        function findOriginal() {
+            return Array.from(document.querySelectorAll('p.MuiTypography-body2'))
+                .find(p => (p.textContent || '').toLowerCase().includes('dernière synchro.'));
+        }
 
-    function syncMirror() {
+        function syncMirror() {
+            const original = findOriginal();
+            const mirror = ensureMirror();
+            if (!original || !mirror) return;
+
+            // Copier le texte
+            mirror.textContent = original.textContent;
+
+            // Cacher l'original une seule fois
+            if (!original.hasAttribute(ORIGINAL_ATTR)) {
+                original.style.display = 'none';
+                original.setAttribute(ORIGINAL_ATTR, '1');
+            }
+        }
+
+        // Initialisation
+        syncMirror();
+
+        // Observer UNIQUEMENT le texte de l’original
         const original = findOriginal();
-        const mirror = ensureMirror();
-        if (!original || !mirror) return;
-
-        // Copier le texte
-        mirror.textContent = original.textContent;
-
-        // Cacher l'original une seule fois
-        if (!original.hasAttribute(ORIGINAL_ATTR)) {
-            original.style.display = 'none';
-            original.setAttribute(ORIGINAL_ATTR, '1');
+        if (original) {
+            const observer = new MutationObserver(() => syncMirror());
+            observer.observe(original, { childList: true, characterData: true, subtree: true });
         }
-    }
-
-    // Initialisation
-    syncMirror();
-
-    // Observer UNIQUEMENT le texte de l’original
-    const original = findOriginal();
-    if (original) {
-        const observer = new MutationObserver(() => syncMirror());
-        observer.observe(original, { childList: true, characterData: true, subtree: true });
-    }
-});
+    });
 
 
 
@@ -660,6 +672,125 @@ whenItemLoaded('p.MuiTypography-body2', () => {
 
   .bme-modal .MuiTypography-body1,
   .bme-modal .MuiTypography-body2 { line-height:1.35; margin:0; }
+
+  .bme-grade-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    padding: 20px;
+    margin: 0 auto;
+    max-width: 1200px;
+  }
+  .bme-grade-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.2s;
+    border: 1px solid #e0e0e0;
+  }
+  .bme-grade-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+  }
+  .bme-grade-header {
+    margin-bottom: 15px;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 10px;
+  }
+  .bme-grade-title {
+    font-weight: bold;
+    font-size: 1.1em;
+    color: #333;
+    margin-bottom: 4px;
+  }
+  .bme-grade-code {
+    font-size: 0.85em;
+    color: #666;
+  }
+  .bme-grade-average-container {
+    text-align: center;
+    margin: 10px 0;
+  }
+  .bme-grade-average {
+    font-size: 2.5em;
+    font-weight: bold;
+  }
+  .bme-grade-coef {
+    font-size: 0.9em;
+    color: #888;
+    margin-top: 4px;
+  }
+  .bme-grade-details {
+    margin-top: auto;
+    font-size: 0.9em;
+    background: #f9f9f9;
+    padding: 10px;
+    border-radius: 8px;
+  }
+  .bme-grade-detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    border-bottom: 1px dashed #eee;
+  }
+  .bme-grade-detail-row:last-child {
+    border-bottom: none;
+  }
+  .bme-ue-header {
+    grid-column: 1 / -1;
+    background: #fff;
+    border-left: 4px solid #0163DD;
+    border: 1px solid #f0f0f0;
+    border-left-width: 4px;
+    padding: 12px 20px;
+    margin: 30px 0 15px 0;
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .bme-ue-info {
+    display: flex;
+    flex-direction: column;
+  }
+  .bme-ue-code {
+    font-size: 0.9em;
+    color: #666;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .bme-ue-name {
+    font-size: 1.4em;
+    color: #333;
+    font-weight: bold;
+  }
+  .bme-ue-stats {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+  }
+  .bme-ue-ects {
+    background: #e3f2fd;
+    color: #0163DD;
+    padding: 4px 10px;
+    border-radius: 6px;
+    font-weight: bold;
+    font-size: 0.9em;
+  }
+  .bme-ue-average {
+    background: #f3f4f6;
+    color: #333;
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 1.1em;
+    border: 1px solid #e5e7eb;
+  }
   `;
         document.head.appendChild(css);
     }
@@ -669,9 +800,9 @@ whenItemLoaded('p.MuiTypography-body2', () => {
         date: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2"/><line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" stroke-width="2"/><line x1="7" y1="3" x2="7" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="17" y1="3" x2="17" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`,
         time: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6v6h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`,
         room: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c4.2 0 8 3.22 8 8.2 0 3.32-2.67 7.25-8 11.8-5.33-4.55-8-8.48-8-11.8C4 5.22 7.8 2 12 2Zm0 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor"/></svg>`,
-        group:`<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C23 14.17 18.33 13 16 13ZM8 13c-2.67 0-8 1.34-8 4v2h8v-2c0-.7.25-1.37.7-2-.9-.32-1.8-.5-2.7-.5Z" fill="currentColor"/></svg>`,
-        video:`<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2.2l3.8-2.5A1 1 0 0 1 23 7v10a1 1 0 0 1-1.2.9L17 15.4V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" fill="currentColor"/></svg>`,
-        teacher:`<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm0 2c-3.33 0-10 1.67-10 5v2h20v-2c0-3.33-6.67-5-10-5Z" fill="currentColor"/></svg>`
+        group: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C23 14.17 18.33 13 16 13ZM8 13c-2.67 0-8 1.34-8 4v2h8v-2c0-.7.25-1.37.7-2-.9-.32-1.8-.5-2.7-.5Z" fill="currentColor"/></svg>`,
+        video: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2.2l3.8-2.5A1 1 0 0 1 23 7v10a1 1 0 0 1-1.2.9L17 15.4V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" fill="currentColor"/></svg>`,
+        teacher: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm0 2c-3.33 0-10 1.67-10 5v2h20v-2c0-3.33-6.67-5-10-5Z" fill="currentColor"/></svg>`
     };
 
     /* Couleur par type */
@@ -684,7 +815,7 @@ whenItemLoaded('p.MuiTypography-body2', () => {
     /* Utils */
     function pickField(modal, labelPattern) {
         const title = Array.from(modal.querySelectorAll('.MuiTypography-body2'))
-        .find(p => labelPattern.test((p.textContent || '').trim()));
+            .find(p => labelPattern.test((p.textContent || '').trim()));
         if (!title) return null;
         const nodes = [];
         let n = title.nextElementSibling;
@@ -697,7 +828,7 @@ whenItemLoaded('p.MuiTypography-body2', () => {
 
     function getGroups(modal) {
         const t = Array.from(modal.querySelectorAll('.MuiTypography-body2'))
-        .find(p => /groupe/i.test(p.textContent || ''));
+            .find(p => /groupe/i.test(p.textContent || ''));
         if (!t) return { title: null, nodes: [], values: [] };
         const nodes = [];
         const values = [];
@@ -736,7 +867,7 @@ whenItemLoaded('p.MuiTypography-body2', () => {
                 });
             });
         });
-        modalObserver.observe(document.documentElement, { childList:true, subtree:true });
+        modalObserver.observe(document.documentElement, { childList: true, subtree: true });
     });
 
     function enhanceModal(modal, closeBtn) {
@@ -753,18 +884,22 @@ whenItemLoaded('p.MuiTypography-body2', () => {
         // Certains modals n’ajoutent pas la classe .course : on prend le premier chip si besoin
         let chip = modal.querySelector('.MuiChip-root.course') || modal.querySelector('.MuiChip-root');
         const titleEl =
-              modal.querySelector('h2.MuiTypography-root') ||
-              modal.querySelector('h3.MuiTypography-root') ||
-              modal.querySelector('h1.MuiTypography-root');
+            modal.querySelector('h2.MuiTypography-root') ||
+            modal.querySelector('h3.MuiTypography-root') ||
+            modal.querySelector('h1.MuiTypography-root');
 
         /* Détecter le type (CM/TD/TP/PRJ/IE/CTD/TD20/CTP) à partir du code module si possible */
         const codeModuleNode = Array.from(modal.querySelectorAll('.MuiTypography-root, p, span, div'))
-        .find(el => /^code module\s*:/i.test((el.textContent || '').trim()));
+            .find(el => /^code module\s*:/i.test((el.textContent || '').trim()));
         const codeModuleRaw = codeModuleNode?.textContent || '';
         // ex: "Code module : ST2ADB-2526PSA01CM (Cours magistral)"
         // → on garde l’identifiant entier mais on isole le suffixe CM/TD/TP/...
-        const typeFromCode = (codeModuleRaw.match(/([A-Z]{2,3})(?=\s*\(|$)/) || [,''])[1];
-        const typeText = (typeFromCode || chip?.textContent || 'CM').toUpperCase();
+        const typeFromCode = (codeModuleRaw.match(/([A-Z]{2,3})(?=\s*\(|$)/) || [, ''])[1];
+        let typeText = (typeFromCode || chip?.textContent || 'CM').toUpperCase();
+
+        if (modal.textContent.includes('COURS.LANGUE')) {
+            typeText = 'CLG';
+        }
 
         /* Couleur et libellé du chip (forcer CM/TD/TP/PRJ…) */
         modal.style.setProperty('--bme-color', getColorForType(typeText));
@@ -796,10 +931,10 @@ whenItemLoaded('p.MuiTypography-body2', () => {
 
         let moduleId = '';
         const afterLabel = codeModuleRaw.replace(/^.*code module\s*:\s*/i, '');
-        moduleId = (afterLabel.match(/^([A-Z0-9-]+)/) || [,''])[1]
-        // fallback si le libellé a disparu / structure différente
-        || (codeModuleRaw.match(/\b([A-Z0-9]{2,}-[A-Z0-9-]{2,})\b/) || [,''])[1]
-        || '';
+        moduleId = (afterLabel.match(/^([A-Z0-9-]+)/) || [, ''])[1]
+            // fallback si le libellé a disparu / structure différente
+            || (codeModuleRaw.match(/\b([A-Z0-9]{2,}-[A-Z0-9-]{2,})\b/) || [, ''])[1]
+            || '';
 
         const codeP = document.createElement('p');
         codeP.className = 'bme-code';
@@ -871,8 +1006,8 @@ whenItemLoaded('p.MuiTypography-body2', () => {
         grid.appendChild(buildField({ label: 'Salle', icon: BME_ICONS.room, contentHTML: roomHTML }));
 
         const groupsHTML = (groupsInfo.values.length)
-        ? groupsInfo.values.map(g => `<span class="MuiTypography-root MuiTypography-body1"><b>${g}</b></span>`).join('')
-        : '';
+            ? groupsInfo.values.map(g => `<span class="MuiTypography-root MuiTypography-body1"><b>${g}</b></span>`).join('')
+            : '';
         grid.appendChild(buildField({ label: 'Groupe', icon: BME_ICONS.group, contentHTML: groupsHTML }));
 
         const teacherCell = buildField({ label: 'Intervenant(s)', icon: BME_ICONS.teacher, contentHTML: teacherHTML });
@@ -884,4 +1019,201 @@ whenItemLoaded('p.MuiTypography-body2', () => {
 
         contentHost.insertBefore(grid, header.nextSibling);
     }
+    // === Better MyEfrei — Grades Page Redesign ===
+    whenItemLoaded('table.MuiTable-root', (table) => {
+        // Only run on the grades page
+        const title = document.querySelector('h1');
+        if (!title || !title.textContent.includes('Notes')) return;
+
+        if (table.getAttribute('data-bme-processed') === '1') return;
+
+        const rows = Array.from(table.querySelectorAll('tbody tr'));
+        if (rows.length === 0) return;
+
+        const container = document.createElement('div');
+        container.className = 'bme-grade-grid';
+
+        let currentCard = null;
+
+        rows.forEach(row => {
+            const cells = row.children;
+            if (cells.length === 0) return;
+
+            // Determine startIndex for the "Name" column
+            // We assume the table structure ends with [Name] [Type] [Coef] [Grade]
+            // So startIndex is usually cells.length - 4.
+            // If cells.length < 4, we assume it's a special row (UE with colspan) starting at 0.
+            let startIndex = Math.max(0, cells.length - 4);
+
+            const isCourse = row.classList.contains('bg-blue');
+
+            if (isCourse) {
+                // Start new card
+                currentCard = document.createElement('div');
+                currentCard.className = 'bme-grade-card';
+
+                const cell0 = cells[startIndex];
+                const col1 = cell0.textContent.trim();
+                const col3 = cells[startIndex + 2].textContent.trim();
+                const col4 = cells[startIndex + 3].textContent.trim();
+
+                // Parse title and code using content filtering
+                const paragraphs = Array.from(cell0.querySelectorAll('p'));
+                const codeP = paragraphs.find(p => p.textContent.includes('Code module :'));
+                const titleP = paragraphs.find(p => !p.textContent.includes('Code module :'));
+
+                const title = titleP ? titleP.textContent.trim() : col1;
+                const code = codeP ? codeP.textContent.replace('Code module :', '').trim() : '';
+                const moduleCoef = col3 ? `Coef: ${col3.replace(/[()]/g, '')}` : '';
+
+                const header = document.createElement('div');
+                header.className = 'bme-grade-header';
+                header.innerHTML = `
+                    <div class="bme-grade-title">${title}</div>
+                    <div class="bme-grade-code">${code}</div>
+                `;
+                currentCard.appendChild(header);
+
+                // Average
+                const average = col4;
+                const avgContainer = document.createElement('div');
+                avgContainer.className = 'bme-grade-average-container';
+
+                const avgDiv = document.createElement('div');
+                avgDiv.className = 'bme-grade-average';
+                avgDiv.textContent = average || '-';
+
+                // Color code
+                const avgNum = parseFloat(average.replace(',', '.'));
+                if (!isNaN(avgNum)) {
+                    if (avgNum < 10) avgDiv.style.color = '#d32f2f'; // Red
+                    else if (avgNum < 12) avgDiv.style.color = '#f57c00'; // Orange
+                    else avgDiv.style.color = '#388e3c'; // Green
+                } else {
+                    avgDiv.style.color = '#999'; // Gray for N/A
+                }
+                avgContainer.appendChild(avgDiv);
+
+                if (moduleCoef) {
+                    const coefDiv = document.createElement('div');
+                    coefDiv.className = 'bme-grade-coef';
+                    coefDiv.textContent = moduleCoef;
+                    avgContainer.appendChild(coefDiv);
+                }
+
+                currentCard.appendChild(avgContainer);
+
+                const details = document.createElement('div');
+                details.className = 'bme-grade-details';
+                currentCard.appendChild(details);
+
+                container.appendChild(currentCard);
+
+            } else {
+                // Not a course row. Could be UE Header or Detail row.
+                // Find the first cell with substantial text
+                let firstTextIndex = -1;
+                let firstText = '';
+
+                for (let i = 0; i < cells.length; i++) {
+                    const text = cells[i].textContent.trim();
+                    if (text.length > 0) {
+                        firstTextIndex = i;
+                        firstText = text;
+                        break;
+                    }
+                }
+
+                if (firstTextIndex === -1) return; // Empty row
+
+                // If the text is in the Name column (startIndex) or earlier, it's a UE Header.
+                // If it's later (e.g. startIndex + 1 which is Type), it's a Detail row.
+                // Exception: If the row has very few cells (colspan), it's likely a UE header regardless of index.
+                const isUE = (firstTextIndex <= startIndex) || (cells.length < 4);
+
+                if (isUE) {
+                    // UE Header Logic
+                    const ueHeader = document.createElement('div');
+                    ueHeader.className = 'bme-ue-header';
+
+                    let ueCode = '';
+                    let ueName = firstText;
+
+                    const splitMatch = firstText.match(/^(UE\s*[\w\d]+)\s*[-:]?\s*(.*)/i);
+                    if (splitMatch) {
+                        ueCode = splitMatch[1];
+                        ueName = splitMatch[2] || firstText;
+                    }
+
+                    // ECTS and Mean are usually in the last two columns
+                    // But be careful if cells.length is small
+                    const col3 = cells.length >= 3 ? cells[cells.length - 2].textContent.trim() : '';
+                    const col4 = cells.length >= 2 ? cells[cells.length - 1].textContent.trim() : '';
+
+                    const ueECTS = col3 && col3.includes('/') ? `${col3} ECTS` : (col3 ? `${col3} ECTS` : '');
+                    // Refine ECTS extraction: sometimes it's just a number, sometimes "(ECTS - /10)"
+                    // In the HTML provided: "(ECTS - /10)" is in the NAME cell span!
+                    // And col3 is empty.
+                    // Let's check if ECTS is in the name string
+                    if (firstText.includes('(ECTS')) {
+                        // Try to extract from name if col3 failed
+                        // But for now let's stick to col3 if present, or just display what we have.
+                    }
+
+                    const ueAverage = col4;
+
+                    let statsHtml = '';
+                    if (ueECTS && !ueECTS.includes('ECTS ECTS')) { // Avoid double ECTS
+                        statsHtml += `<span class="bme-ue-ects">${ueECTS}</span>`;
+                    }
+                    if (ueAverage && ueAverage !== '-') {
+                        statsHtml += `<span class="bme-ue-average">${ueAverage}</span>`;
+                    }
+
+                    ueHeader.innerHTML = `
+                        <div class="bme-ue-info">
+                            ${ueCode ? `<span class="bme-ue-code">${ueCode}</span>` : ''}
+                            <span class="bme-ue-name">${ueName}</span>
+                        </div>
+                        <div class="bme-ue-stats">
+                            ${statsHtml}
+                        </div>
+                    `;
+
+                    container.appendChild(ueHeader);
+                    currentCard = null; // Reset current card
+
+                } else if (currentCard) {
+                    // Detail Row Logic
+                    // We assume: [Empty] [Type] [Coef] [Grade]
+                    // So firstText is Type.
+                    // Coef is next. Grade is last.
+
+                    const type = firstText;
+                    // Coef is usually at startIndex + 2.
+                    // If firstTextIndex is startIndex + 1 (Type), then Coef is next cell.
+                    const coefIndex = startIndex + 2;
+                    const gradeIndex = startIndex + 3;
+
+                    const coef = (cells[coefIndex]) ? cells[coefIndex].textContent.trim() : '';
+                    const grade = (cells[gradeIndex]) ? cells[gradeIndex].textContent.trim() : '';
+
+                    if (grade || type !== 'Autre') {
+                        const detailRow = document.createElement('div');
+                        detailRow.className = 'bme-grade-detail-row';
+                        const typeHtml = `<b>${type}</b>`;
+                        const leftText = coef ? `${typeHtml} ${coef}` : typeHtml;
+                        detailRow.innerHTML = `<span>${leftText}</span><span>${grade}</span>`;
+                        currentCard.querySelector('.bme-grade-details').appendChild(detailRow);
+                    }
+                }
+            }
+        });
+
+        // Hide original table and append new container
+        table.style.display = 'none';
+        table.parentNode.appendChild(container);
+        table.setAttribute('data-bme-processed', '1');
+    });
+
 })();
