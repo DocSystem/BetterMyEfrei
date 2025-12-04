@@ -789,12 +789,17 @@
     gap: 15px;
   }
   .bme-ue-ects {
-    background: #e3f2fd;
+    display: inline-flex;
+    align-items: center;
+    background-color: #f0f7ff;
     color: #0163DD;
-    padding: 4px 10px;
-    border-radius: 6px;
-    font-weight: bold;
-    font-size: 0.9em;
+    border: 1px solid #d1e9ff;
+    padding: 5px 14px;
+    border-radius: 50px;
+    font-weight: 700;
+    font-size: 1.1em;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 4px rgba(1, 99, 221, 0.08);
   }
   .bme-ue-average {
     background: #f3f4f6;
@@ -1165,20 +1170,28 @@
                     const col4 = cells.length >= 2 ? cells[cells.length - 1].textContent.trim() : '';
 
                     const ueECTS = col3 && col3.includes('/') ? `${col3} ECTS` : (col3 ? `${col3} ECTS` : '');
-                    // Refine ECTS extraction: sometimes it's just a number, sometimes "(ECTS - /10)"
-                    // In the HTML provided: "(ECTS - /10)" is in the NAME cell span!
-                    // And col3 is empty.
-                    // Let's check if ECTS is in the name string
-                    if (firstText.includes('(ECTS')) {
-                        // Try to extract from name if col3 failed
-                        // But for now let's stick to col3 if present, or just display what we have.
+
+                    // Check if ECTS is in the name string
+                    const ectsMatch = firstText.match(/\(ECTS\s*-\s*([^)]+)\)/i);
+                    let finalECTS = ueECTS;
+                    if (ectsMatch) {
+                        let ectsVal = ectsMatch[1].trim();
+                        // If it starts with / (e.g. "/10"), treat as pending/unknown
+                        if (ectsVal.startsWith('/')) {
+                            ectsVal = `-${ectsVal}`;
+                        }
+                        finalECTS = `${ectsVal} ECTS`;
+                        // Clean up name
+                        ueName = ueName.replace(ectsMatch[0], '').trim();
+                        // Also clean up trailing hyphens if any
+                        ueName = ueName.replace(/\s*-\s*$/, '');
                     }
 
                     const ueAverage = col4;
 
                     let statsHtml = '';
-                    if (ueECTS && !ueECTS.includes('ECTS ECTS')) { // Avoid double ECTS
-                        statsHtml += `<span class="bme-ue-ects">${ueECTS}</span>`;
+                    if (finalECTS && !finalECTS.includes('ECTS ECTS')) { // Avoid double ECTS
+                        statsHtml += `<span class="bme-ue-ects">${finalECTS}</span>`;
                     }
                     if (ueAverage && ueAverage !== '-') {
                         statsHtml += `<span class="bme-ue-average">${ueAverage}</span>`;
