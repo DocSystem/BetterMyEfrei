@@ -696,9 +696,11 @@
     box-shadow: 0 6px 12px rgba(0,0,0,0.15);
   }
   .bme-grade-header {
-    margin-bottom: 15px;
-    border-bottom: 1px solid #eee;
-    padding-bottom: 10px;
+    background-color: #eef6fc; /* Elegant pastel blue */
+    margin: -20px -20px 15px -20px; /* Edge-to-edge */
+    padding: 15px 20px;
+    border-radius: 12px 12px 0 0;
+    border-bottom: 1px solid #e3ebf3;
   }
   .bme-grade-title {
     font-weight: bold;
