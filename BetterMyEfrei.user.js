@@ -736,6 +736,18 @@
     padding: 4px 0;
     border-bottom: 1px dashed #eee;
   }
+  .bme-detail-left {
+    display: flex;
+    align-items: center;
+  }
+  .bme-detail-type {
+    display: inline-block;
+    width: 45px; /* Fixed width for alignment */
+  }
+  .bme-detail-coef {
+    font-style: italic;
+    color: #666;
+  }
   .bme-grade-detail-row:last-child {
     border-bottom: none;
   }
@@ -1201,9 +1213,17 @@
                     if (grade || type !== 'Autre') {
                         const detailRow = document.createElement('div');
                         detailRow.className = 'bme-grade-detail-row';
-                        const typeHtml = `<b>${type}</b>`;
-                        const leftText = coef ? `${typeHtml} ${coef}` : typeHtml;
-                        detailRow.innerHTML = `<span>${leftText}</span><span>${grade}</span>`;
+
+                        const typeHtml = `<span class="bme-detail-type"><b>${type}</b></span>`;
+                        const coefHtml = coef ? `<span class="bme-detail-coef">${coef}</span>` : '';
+
+                        detailRow.innerHTML = `
+                            <div class="bme-detail-left">
+                                ${typeHtml}
+                                ${coefHtml}
+                            </div>
+                            <span>${grade}</span>
+                        `;
                         currentCard.querySelector('.bme-grade-details').appendChild(detailRow);
                     }
                 }
