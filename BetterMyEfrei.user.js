@@ -729,13 +729,13 @@
     margin-top: auto;
     font-size: 0.9em;
     background: #f9f9f9;
-    padding: 10px;
+    padding: 7px 10px;
     border-radius: 8px;
   }
   .bme-grade-detail-row {
     display: flex;
     justify-content: space-between;
-    padding: 4px 0;
+    padding: 6px 0;
     border-bottom: 1px dashed #eee;
   }
   .bme-detail-left {
