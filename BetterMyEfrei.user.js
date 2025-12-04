@@ -729,7 +729,7 @@
     margin-top: auto;
     font-size: 0.9em;
     background: #f9f9f9;
-    padding: 7px 10px;
+    padding: 2px 10px;
     border-radius: 8px;
   }
   .bme-grade-detail-row {
