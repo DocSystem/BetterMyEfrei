@@ -1173,30 +1173,82 @@
 
     // Modal Styles Map
     const PDF_STYLES = {
-        wrapper: `position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; flex-direction: column; z-index: 1400; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); opacity: 0; transition: opacity 0.3s ease;`,
-        toolbar: `flex: 0 0 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 30px; border-bottom: 1px solid rgba(0,0,0,0.1); box-shadow: 0 2px 10px rgba(0,0,0,0.05); background: white;`,
+        modalOverlay: `position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; flex-direction: column; z-index: 1400; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); opacity: 0; transition: opacity 0.3s ease;`,
+        header: `flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 15px 30px; border-bottom: 1px solid rgba(0,0,0,0.1); box-shadow: 0 2px 10px rgba(0,0,0,0.05); background: white;`,
         container: `flex: 1; overflow: auto; background: #e0e0e0; display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 40px 0;`,
         btn: `border:none; background:white; width:32px; height:32px; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: all 0.2s;`,
         dlBtn: `border: 1px solid #0163DD; background: #0163DD; color: white; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 8px; transition: all 0.2s;`,
         loader: `display:flex; flex-direction:column; align-items:center; gap:15px; margin-top:100px;`
     };
 
-    function openExamPdfJsModal(title, filePath) {
+    function openExamPdfJsModal(title, filePath, moduleName, examType) {
         // Cleanup existing
-        document.getElementById('bme-exam-modal-wrapper')?.remove();
+        document.getElementById('bme-pdf-modal')?.remove();
+
+        // Date Parsing Logic
+        // Expected format: "2025\04\26\20220655-TE601-DE-11000000-2025-03-22.PDF"
+        // Publication Date: Start of string
+        // Exam Date: End of string (before extension)
+
+        let pubDateStr = '-';
+        let examDateStr = '-';
+
+        try {
+            // Normalize path separators to forward slashes for easier split/regex
+            const normalizedPath = filePath.replace(/\\/g, '/');
+            const parts = normalizedPath.split('/');
+            const filename = parts[parts.length - 1]; // "20220655-TE60...-2025-03-22.PDF"
+
+            // Publication Date: First 3 parts if they look like YYYY/MM/DD
+            // Or just parsing the beginning of the string string "2025\04\26"
+            // Let's rely on standard path structure if consistent
+            if (parts.length >= 3) {
+                const y = parts[0];
+                const m = parts[1];
+                const d = parts[2];
+                if (y.length === 4 && m.length === 2 && d.length === 2) {
+                    pubDateStr = `${d}/${m}/${y}`;
+                }
+            }
+
+            // Exam Date: Extract YYYY-MM-DD from end of filename
+            const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})\.PDF$/i);
+            if (dateMatch) {
+                const [y, m, d] = dateMatch[1].split('-');
+                examDateStr = `${d}/${m}/${y}`;
+            }
+        } catch (e) { console.error('BME: Date parse error', e); }
+
 
         const wrapper = document.createElement('div');
-        wrapper.id = 'bme-exam-modal-wrapper';
-        wrapper.style.cssText = PDF_STYLES.wrapper;
+        wrapper.id = 'bme-pdf-modal';
+        wrapper.style.cssText = PDF_STYLES.modalOverlay;
 
-        // Construct UI
+        // Header with Modern Design
+        // Left: Info (Copie, Module, Type)
+        // Right: Dates + Actions
         wrapper.innerHTML = `
-            <div style="${PDF_STYLES.toolbar}">
-                <div style="font-weight: 600; font-size: 1.1rem; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw;">${title}</div>
-                <div style="display: flex; gap: 15px; align-items: center;">
-                    <div style="display: flex; gap: 5px; background: #f5f5f5; padding: 4px; border-radius: 8px;">
+            <div style="${PDF_STYLES.header}">
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                    <div style="font-size: 1.1rem; font-weight: 700; color: #333; display: flex; align-items: center; gap: 8px;">
+                        <span>Copie</span>
+                        <div style="width: 4px; height: 4px; background: #bbb; border-radius: 50%;"></div>
+                        <span style="color: #0163DD;">${moduleName || 'Module'}</span>
+                    </div>
+                    <div style="font-size: 0.9rem; color: #666; font-weight: 500;">
+                        ${examType || 'Examen'}
+                    </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 24px;">
+                   <div style="display: flex; flex-direction: column; gap: 2px; text-align: right; font-size: 0.8rem; color: #555; padding-right: 16px; border-right: 1px solid #eee;">
+                        <div><span style="color:#888; margin-right:4px;">Examen du:</span> <strong>${examDateStr}</strong></div>
+                        <div><span style="color:#888; margin-right:4px;">Publié le:</span> <strong>${pubDateStr}</strong></div>
+                   </div>
+
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <span id="bme-scale-val" style="font-variant-numeric: tabular-nums; font-weight: 500; color: #555; width: 45px; text-align: center;">100%</span>
                         <button id="bme-btn-out" title="Dézoomer" style="${PDF_STYLES.btn}"><svg viewBox="0 0 24 24" width="18" height="18" fill="#555"><path d="M19 13H5v-2h14v2z"/></svg></button>
-                        <span id="bme-scale-val" style="min-width: 50px; text-align: center; font-variant-numeric: tabular-nums; line-height:32px; font-size: 0.9rem; color:#666;">100%</span>
                         <button id="bme-btn-in" title="Zoomer" style="${PDF_STYLES.btn}"><svg viewBox="0 0 24 24" width="18" height="18" fill="#555"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></button>
                     </div>
                     <a id="bme-dl-link" href="#" target="_blank" style="text-decoration: none;">
@@ -1282,11 +1334,11 @@
                 if (!res.ok) throw new Error('Fetch failed');
 
                 // Filename logic
-                let fname = `Copie_${title.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+                let fname = `Copie_${(moduleName || 'Exam').replace(/[^a-z0-9]/gi, '_')}.pdf`;
                 const disp = res.headers.get('Content-Disposition');
                 const match = disp && disp.match(/filename="?([^"]+)"?/);
                 if (match?.[1]) fname = match[1];
-                else if (filePath) fname = filePath.split('/').pop() || fname;
+                else if (filePath) fname = filePath.replace(/\\/g, '/').split('/').pop() || fname;
 
                 const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
@@ -1335,10 +1387,25 @@
             return num.toString().replace('.', ',');
         };
 
-        data.grades.ues.forEach(ue => {
+        // Concatenate standard UEs and "unaffectedModules" if present
+        const allUEs = [...(data.grades.ues || [])];
+        if (data.grades.unaffectedModules && data.grades.unaffectedModules.modules && data.grades.unaffectedModules.modules.length > 0) {
+            allUEs.push({
+                ...data.grades.unaffectedModules,
+                isUnaffected: true // Flag to identify for styling
+            });
+        }
+
+        allUEs.forEach(ue => {
             // UE Header
             const ueHeader = document.createElement('div');
             ueHeader.className = 'bme-ue-header';
+
+            // Unaffected Style Override
+            if (ue.isUnaffected) {
+                ueHeader.style.borderLeftColor = '#9e9e9e'; // Grey accent
+                ueHeader.style.background = '#fafafa'; // Slightly different background
+            }
 
             // ECTS Logic
             const earnedStr = fmtCoef(ue.ectsEarned);
@@ -1352,11 +1419,14 @@
             }
 
             let statsHtml = '';
-            if (ectsLabel) {
-                statsHtml += `<span class="bme-ue-ects">${ectsLabel}</span>`;
-            }
-            if (ue.grade !== null && ue.grade !== undefined) {
-                statsHtml += `<span class="bme-ue-average">${fmt(ue.grade)}</span>`;
+            // Only show stats if NOT unaffected
+            if (!ue.isUnaffected) {
+                if (ectsLabel) {
+                    statsHtml += `<span class="bme-ue-ects">${ectsLabel}</span>`;
+                }
+                if (ue.grade !== null && ue.grade !== undefined) {
+                    statsHtml += `<span class="bme-ue-average">${fmt(ue.grade)}</span>`;
+                }
             }
 
             // UE Name/Code Parsing
@@ -1374,6 +1444,9 @@
                     }
                 }
             }
+
+            // Hide code for unaffected
+            if (ue.isUnaffected) displayCode = '';
 
             ueHeader.innerHTML = `
                  <div class="bme-ue-info">
@@ -1540,14 +1613,13 @@
 
                             if (g.examFile) {
                                 const btn = row.querySelector('.bme-exam-btn');
-                                if (btn) {
-                                    btn.addEventListener('click', (e) => {
-                                        e.stopPropagation();
-                                        openExamPdfJsModal(`Copie: ${mod.name} - ${detailType}`, g.examFile);
-                                    });
-                                    btn.addEventListener('mouseenter', () => btn.style.transform = 'scale(1.1)');
-                                    btn.addEventListener('mouseleave', () => btn.style.transform = 'scale(1)');
-                                }
+                                btn.onclick = (e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    openExamPdfJsModal(null, g.examFile, mod.name, detailType);
+                                };
+                                btn.addEventListener('mouseenter', () => btn.style.transform = 'scale(1.1)');
+                                btn.addEventListener('mouseleave', () => btn.style.transform = 'scale(1)');
                             }
 
                             details.appendChild(row);
@@ -1637,7 +1709,7 @@ function openTeacherPopover(event, teachers, moduleName) {
 
     // Glassmorphism Styles
     popover.style.cssText = `
-        position: fixed;
+        position: absolute;
         z-index: 10000;
         background: rgba(255, 255, 255, 0.95);
         backdrop-filter: blur(10px);
@@ -1673,14 +1745,21 @@ function openTeacherPopover(event, teachers, moduleName) {
     });
     popover.appendChild(list);
 
-    // Calculate Position
+    // Calculate Position (Relative to document for absolute positioning)
     const rect = event.currentTarget.getBoundingClientRect();
-    let top = rect.bottom + 10;
-    let left = rect.left;
+    const scrollX = window.scrollX || window.pageXOffset;
+    const scrollY = window.scrollY || window.pageYOffset;
+
+    let top = rect.bottom + scrollY + 10;
+    let left = rect.left + scrollX;
 
     // Adjust if off-screen
-    if (left + 250 > window.innerWidth) left = window.innerWidth - 270;
-    if (top + 200 > window.innerHeight) top = rect.top - 200; // Show above if too low
+    if (rect.left + 250 > window.innerWidth) left = (window.innerWidth - 270) + scrollX;
+
+    // Check vertical overflow (viewport relative)
+    if (rect.bottom + 200 > window.innerHeight) {
+        top = (rect.top + scrollY) - 200;
+    }
 
     popover.style.top = top + 'px';
     popover.style.left = left + 'px';
