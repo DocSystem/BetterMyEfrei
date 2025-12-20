@@ -6,16 +6,97 @@
 // @author       DocSystem & Doryan D. & Mathu_lmn & Mat15
 // @match        https://www.myefrei.fr/portal/student/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=www.myefrei.fr
-// @grant        none
+// @match        https://www.myefrei.fr/portal/student/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=www.myefrei.fr
 // @updateURL    https://github.com/DocSystem/BetterMyEfrei/raw/refs/heads/main/BetterMyEfrei.user.js
 // @downloadURL  https://github.com/DocSystem/BetterMyEfrei/raw/refs/heads/main/BetterMyEfrei.user.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js
+// @resource     PDF_WORKER https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js
+// @grant        GM_getResourceText
+// @grant        GM_getResourceURL
+// @grant        GM_getResourceText
+// @grant        GM_getResourceURL
+// @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
+// @connect      cdnjs.cloudflare.com
 // ==/UserScript==
 
 (function () {
     'use strict';
 
+    // Access the page window (unsafeWindow) for interception, or fallback to standard window
+    const w = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
+
+
     // Markers to avoid reprocessing
     const PROCESSED_ATTR = 'data-bme-processed';
+
+    // === Better MyEfrei — API Interceptor for Grades ===
+    let latestGradesData = null;
+
+    function broadcastGradesUpdate(data) {
+        latestGradesData = data;
+        w.dispatchEvent(new CustomEvent('bme-grades-update', { detail: data }));
+    }
+
+    // Hook fetch to capture grades data transparently
+    const originalFetch = w.fetch;
+    w.fetch = async function (...args) {
+        const response = await originalFetch.apply(this, args);
+        try {
+            const url = response.url || (args[0] && (args[0].url || args[0]));
+            if (url && typeof url === 'string' && url.includes('/api/rest/student/grades')) {
+                const clone = response.clone();
+                clone.json().then(data => {
+                    broadcastGradesUpdate(data);
+                }).catch(e => console.error('BME: Failed to parse grades JSON', e));
+            }
+        } catch (e) {
+            console.error('BME: Fetch Interceptor Error', e);
+        }
+        return response;
+    };
+
+    // Hook XMLHttpRequest to capture grades data if fetch is not used (e.g. Axios)
+    const originalXHROpen = w.XMLHttpRequest.prototype.open;
+    const originalXHRSend = w.XMLHttpRequest.prototype.send;
+
+    w.XMLHttpRequest.prototype.open = function (method, url) {
+        this._bme_url = url; // Save URL for check in send/load
+        return originalXHROpen.apply(this, arguments);
+    };
+
+    window.XMLHttpRequest.prototype.send = function () {
+        this.addEventListener('load', function () {
+            try {
+                if (this._bme_url && typeof this._bme_url === 'string' && this._bme_url.includes('/api/rest/student/grades')) {
+                    const data = JSON.parse(this.responseText);
+                    broadcastGradesUpdate(data);
+                }
+            } catch (e) {
+                console.error('BME: XHR Interceptor Error', e);
+            }
+        });
+        return originalXHRSend.apply(this, arguments);
+    };
+
+    // Helper to fetch default grades safely
+    async function fetchDefaultGrades() {
+        try {
+            const semestersRes = await originalFetch('https://www.myefrei.fr/api/rest/student/semesters');
+            const semesters = await semestersRes.json();
+            const current = semesters.find(s => s.currentSemester) || semesters[0];
+            if (!current) return null;
+
+            const gradesRes = await originalFetch(`https://www.myefrei.fr/api/rest/student/grades?schoolYear=${current.schoolYear}&semester=${current.semester}`);
+            const data = await gradesRes.json();
+            broadcastGradesUpdate(data);
+            return data;
+        } catch (e) {
+            console.error('BME: Error fetching default grades', e);
+            return null;
+        }
+    }
 
     let CUSTOM_CSS = ``;
     const CUSTOM_CSS_ID = 'bme-custom-css';
@@ -821,7 +902,8 @@
         room: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c4.2 0 8 3.22 8 8.2 0 3.32-2.67 7.25-8 11.8-5.33-4.55-8-8.48-8-11.8C4 5.22 7.8 2 12 2Zm0 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor"/></svg>`,
         group: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C23 14.17 18.33 13 16 13ZM8 13c-2.67 0-8 1.34-8 4v2h8v-2c0-.7.25-1.37.7-2-.9-.32-1.8-.5-2.7-.5Z" fill="currentColor"/></svg>`,
         video: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2.2l3.8-2.5A1 1 0 0 1 23 7v10a1 1 0 0 1-1.2.9L17 15.4V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" fill="currentColor"/></svg>`,
-        teacher: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm0 2c-3.33 0-10 1.67-10 5v2h20v-2c0-3.33-6.67-5-10-5Z" fill="currentColor"/></svg>`
+        teacher: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm0 2c-3.33 0-10 1.67-10 5v2h20v-2c0-3.33-6.67-5-10-5Z" fill="currentColor"/></svg>`,
+        exam: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`
     };
 
     /* Couleur par type */
@@ -1039,216 +1121,536 @@
         contentHost.insertBefore(grid, header.nextSibling);
     }
     // === Better MyEfrei — Grades Page Redesign ===
-    whenItemLoaded('table.MuiTable-root', (table) => {
-        // Only run on the grades page
-        const title = document.querySelector('h1');
-        if (!title || !title.textContent.includes('Notes')) return;
 
-        if (table.getAttribute('data-bme-processed') === '1') return;
+    // Add Exam Icon to BME_ICONS
+    BME_ICONS.exam = `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true" style="color:#0163DD;"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6z" fill="currentColor"/></svg>`;
 
-        const rows = Array.from(table.querySelectorAll('tbody tr'));
-        if (rows.length === 0) return;
+    // --- PDF.js Logic ---
 
-        const container = document.createElement('div');
-        container.className = 'bme-grade-grid';
+    // Ensure PDF.js is properly configured with the worker using multiple fallbacks
+    async function loadPdfJsLibrary() {
+        if (!window.pdfjsLib) {
+            throw new Error('PDF.js not loaded (require failed)');
+        }
 
-        let currentCard = null;
+        if (!window.pdfjsLib.GlobalWorkerOptions.workerSrc) {
+            console.log('BME: Configuring PDF.js worker...');
+            let workerBlobUrl = null;
 
-        rows.forEach(row => {
-            const cells = row.children;
-            if (cells.length === 0) return;
-
-            // Determine startIndex for the "Name" column
-            // We assume the table structure ends with [Name] [Type] [Coef] [Grade]
-            // So startIndex is usually cells.length - 4.
-            // If cells.length < 4, we assume it's a special row (UE with colspan) starting at 0.
-            let startIndex = Math.max(0, cells.length - 4);
-
-            const isCourse = row.classList.contains('bg-blue');
-
-            if (isCourse) {
-                // Start new card
-                currentCard = document.createElement('div');
-                currentCard.className = 'bme-grade-card';
-
-                const cell0 = cells[startIndex];
-                const col1 = cell0.textContent.trim();
-                const col3 = cells[startIndex + 2].textContent.trim();
-                const col4 = cells[startIndex + 3].textContent.trim();
-
-                // Parse title and code using content filtering
-                const paragraphs = Array.from(cell0.querySelectorAll('p'));
-                const codeP = paragraphs.find(p => p.textContent.includes('Code module :'));
-                const titleP = paragraphs.find(p => !p.textContent.includes('Code module :'));
-
-                const title = titleP ? titleP.textContent.trim() : col1;
-                const code = codeP ? codeP.textContent.replace('Code module :', '').trim() : '';
-                const moduleCoef = col3 ? `Coef: ${col3.replace(/[()]/g, '')}` : '';
-
-                const header = document.createElement('div');
-                header.className = 'bme-grade-header';
-                header.innerHTML = `
-                    <div class="bme-grade-title">${title}</div>
-                    <div class="bme-grade-code">${code}</div>
-                `;
-                currentCard.appendChild(header);
-
-                // Average
-                const average = col4;
-                const avgContainer = document.createElement('div');
-                avgContainer.className = 'bme-grade-average-container';
-
-                const avgDiv = document.createElement('div');
-                avgDiv.className = 'bme-grade-average';
-                avgDiv.textContent = average || '-';
-
-                // Color code
-                const avgNum = parseFloat(average.replace(',', '.'));
-                if (!isNaN(avgNum)) {
-                    if (avgNum < 10) avgDiv.style.color = '#d32f2f'; // Red
-                    else if (avgNum < 12) avgDiv.style.color = '#f57c00'; // Orange
-                    else avgDiv.style.color = '#388e3c'; // Green
-                } else {
-                    avgDiv.style.color = '#999'; // Gray for N/A
-                }
-                avgContainer.appendChild(avgDiv);
-
-                if (moduleCoef) {
-                    const coefDiv = document.createElement('div');
-                    coefDiv.className = 'bme-grade-coef';
-                    coefDiv.textContent = moduleCoef;
-                    avgContainer.appendChild(coefDiv);
-                }
-
-                currentCard.appendChild(avgContainer);
-
-                const details = document.createElement('div');
-                details.className = 'bme-grade-details';
-                currentCard.appendChild(details);
-
-                container.appendChild(currentCard);
-
-            } else {
-                // Not a course row. Could be UE Header or Detail row.
-                // Find the first cell with substantial text
-                let firstTextIndex = -1;
-                let firstText = '';
-
-                for (let i = 0; i < cells.length; i++) {
-                    const text = cells[i].textContent.trim();
-                    if (text.length > 0) {
-                        firstTextIndex = i;
-                        firstText = text;
-                        break;
+            // Strategy 1: GM_getResourceText (standard way to get local resource content)
+            try {
+                if (typeof GM_getResourceText !== 'undefined') {
+                    const workerScript = GM_getResourceText('PDF_WORKER');
+                    if (workerScript) {
+                        console.log('BME: Loaded worker via GM_getResourceText');
+                        const p = new Blob([workerScript], { type: 'text/javascript' });
+                        workerBlobUrl = URL.createObjectURL(p);
                     }
                 }
+            } catch (e) { console.warn('BME: GM_getResourceText failed', e); }
 
-                if (firstTextIndex === -1) return; // Empty row
-
-                // If the text is in the Name column (startIndex) or earlier, it's a UE Header.
-                // If it's later (e.g. startIndex + 1 which is Type), it's a Detail row.
-                // Exception: If the row has very few cells (colspan), it's likely a UE header regardless of index.
-                const isUE = (firstTextIndex <= startIndex) || (cells.length < 4);
-
-                if (isUE) {
-                    // UE Header Logic
-                    const ueHeader = document.createElement('div');
-                    ueHeader.className = 'bme-ue-header';
-
-                    let ueCode = '';
-                    let ueName = firstText;
-
-                    const splitMatch = firstText.match(/^(UE\s*[\w\d]+)\s*[-:]?\s*(.*)/i);
-                    if (splitMatch) {
-                        ueCode = splitMatch[1];
-                        ueName = splitMatch[2] || firstText;
-                    }
-
-                    // ECTS and Mean are usually in the last two columns
-                    // But be careful if cells.length is small
-                    const col3 = cells.length >= 3 ? cells[cells.length - 2].textContent.trim() : '';
-                    const col4 = cells.length >= 2 ? cells[cells.length - 1].textContent.trim() : '';
-
-                    const ueECTS = col3 && col3.includes('/') ? `${col3} ECTS` : (col3 ? `${col3} ECTS` : '');
-
-                    // Check if ECTS is in the name string
-                    const ectsMatch = firstText.match(/\(ECTS\s*-\s*([^)]+)\)/i);
-                    let finalECTS = ueECTS;
-                    if (ectsMatch) {
-                        let ectsVal = ectsMatch[1].trim();
-                        // If it starts with / (e.g. "/10"), treat as pending/unknown
-                        if (ectsVal.startsWith('/')) {
-                            ectsVal = `-${ectsVal}`;
+            // Strategy 2: GM_getResourceURL (some managers provide a direct url)
+            if (!workerBlobUrl) {
+                try {
+                    if (typeof GM_getResourceURL !== 'undefined') {
+                        const url = GM_getResourceURL('PDF_WORKER');
+                        if (url) {
+                            console.log('BME: Loaded worker via GM_getResourceURL', url);
+                            workerBlobUrl = url;
                         }
-                        finalECTS = `${ectsVal} ECTS`;
-                        // Clean up name
-                        ueName = ueName.replace(ectsMatch[0], '').trim();
-                        // Also clean up trailing hyphens if any
-                        ueName = ueName.replace(/\s*-\s*$/, '');
                     }
+                } catch (e) { console.warn('BME: GM_getResourceURL failed', e); }
+            }
 
-                    const ueAverage = col4;
-
-                    let statsHtml = '';
-                    if (finalECTS && !finalECTS.includes('ECTS ECTS')) { // Avoid double ECTS
-                        statsHtml += `<span class="bme-ue-ects">${finalECTS}</span>`;
+            // Strategy 3: GM_xmlhttpRequest (nuclear option: fetch from CDN bypasses CSP)
+            if (!workerBlobUrl) {
+                console.log('BME: Attempting to fetch worker via GM_xmlhttpRequest...');
+                try {
+                    if (typeof GM_xmlhttpRequest !== 'undefined') {
+                        workerBlobUrl = await new Promise((resolve) => {
+                            GM_xmlhttpRequest({
+                                method: "GET",
+                                url: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+                                onload: function (response) {
+                                    console.log('BME: GM_xmlhttpRequest success');
+                                    const p = new Blob([response.responseText], { type: 'text/javascript' });
+                                    resolve(URL.createObjectURL(p));
+                                },
+                                onerror: function (err) {
+                                    console.error('BME: GM_xmlhttpRequest failed', err);
+                                    resolve(null);
+                                }
+                            });
+                        });
                     }
-                    if (ueAverage && ueAverage !== '-') {
-                        statsHtml += `<span class="bme-ue-average">${ueAverage}</span>`;
-                    }
+                } catch (e) { console.warn('BME: GM_xmlhttpRequest failed', e); }
+            }
 
-                    ueHeader.innerHTML = `
-                        <div class="bme-ue-info">
-                            ${ueCode ? `<span class="bme-ue-code">${ueCode}</span>` : ''}
-                            <span class="bme-ue-name">${ueName}</span>
-                        </div>
-                        <div class="bme-ue-stats">
-                            ${statsHtml}
-                        </div>
-                    `;
+            if (workerBlobUrl) {
+                window.pdfjsLib.GlobalWorkerOptions.workerSrc = workerBlobUrl;
+            } else {
+                console.error('BME: Worker loading failed. Grants available?', {
+                    text: typeof GM_getResourceText,
+                    url: typeof GM_getResourceURL,
+                    xhr: typeof GM_xmlhttpRequest
+                });
+                throw new Error('Could not load PDF Worker via any method.');
+            }
+        }
+        return window.pdfjsLib;
+    }
 
-                    container.appendChild(ueHeader);
-                    currentCard = null; // Reset current card
+    function openExamPdfJsModal(title, filePath) {
+        const fileUrl = `https://www.myefrei.fr/api/rest/student/exam-file?pathname=${filePath}`;
+        console.log('BME: Opening custom PDF.js modal for', title);
 
-                } else if (currentCard) {
-                    // Detail Row Logic
-                    // We assume: [Empty] [Type] [Coef] [Grade]
-                    // So firstText is Type.
-                    // Coef is next. Grade is last.
+        // Remove existing modal if any
+        const existing = document.getElementById('bme-exam-modal-wrapper');
+        if (existing) existing.remove();
 
-                    const type = firstText;
-                    // Coef is usually at startIndex + 2.
-                    // If firstTextIndex is startIndex + 1 (Type), then Coef is next cell.
-                    const coefIndex = startIndex + 2;
-                    const gradeIndex = startIndex + 3;
+        // Styles
+        const glassStyle = 'background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);';
+        const modalStyle = `
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            display: flex; flex-direction: column; z-index: 1400;
+            ${glassStyle}
+            opacity: 0; transition: opacity 0.3s ease;
+        `;
 
-                    const coef = (cells[coefIndex]) ? cells[coefIndex].textContent.trim() : '';
-                    const grade = (cells[gradeIndex]) ? cells[gradeIndex].textContent.trim() : '';
+        // Create Wrapper
+        const wrapper = document.createElement('div');
+        wrapper.id = 'bme-exam-modal-wrapper';
+        wrapper.style.cssText = modalStyle;
 
-                    if (grade || type !== 'Autre') {
-                        const detailRow = document.createElement('div');
-                        detailRow.className = 'bme-grade-detail-row';
+        // --- Toolbar ---
+        const toolbar = document.createElement('div');
+        toolbar.style.cssText = `
+            flex: 0 0 60px; display: flex; align-items: center; justify-content: space-between;
+            padding: 0 30px; border-bottom: 1px solid rgba(0,0,0,0.1); box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+            background: white;
+        `;
 
-                        const typeHtml = `<span class="bme-detail-type"><b>${type}</b></span>`;
-                        const coefHtml = coef ? `<span class="bme-detail-coef">${coef}</span>` : '';
+        toolbar.innerHTML = `
+            <div style="font-weight: 600; font-size: 1.1rem; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw;">
+                ${title}
+            </div>
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <div style="display: flex; gap: 5px; background: #f5f5f5; padding: 4px; border-radius: 8px;">
+                    <button id="bme-pdf-zoom-out" title="Dézoomer" style="border:none; background:white; width:32px; height:32px; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: all 0.2s;">
+                         <svg viewBox="0 0 24 24" width="18" height="18" fill="#555"><path d="M19 13H5v-2h14v2z"/></svg>
+                    </button>
+                    <span id="bme-pdf-scale-val" style="min-width: 50px; text-align: center; font-variant-numeric: tabular-nums; line-height:32px; font-size: 0.9rem; color:#666;">100%</span>
+                    <button id="bme-pdf-zoom-in" title="Zoomer" style="border:none; background:white; width:32px; height:32px; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: all 0.2s;">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="#555"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                    </button>
+                </div>
+                <a id="bme-pdf-download" href="#" target="_blank" style="text-decoration: none;">
+                    <button style="border: 1px solid #0163DD; background: #0163DD; color: white; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"></path></svg>
+                        Télécharger
+                    </button>
+                </a>
+                <button id="bme-pdf-close" style="border: none; background: transparent; cursor: pointer; color: #666; display: flex; padding: 5px;">
+                    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></svg>
+                </button>
+            </div>
+        `;
 
-                        detailRow.innerHTML = `
-                            <div class="bme-detail-left">
-                                ${typeHtml}
-                                ${coefHtml}
-                            </div>
-                            <span>${grade}</span>
-                        `;
-                        currentCard.querySelector('.bme-grade-details').appendChild(detailRow);
+        wrapper.appendChild(toolbar);
+
+        // --- Container for Canvases ---
+        const container = document.createElement('div');
+        container.id = 'bme-pdf-container';
+        container.style.cssText = `
+            flex: 1; overflow: auto; background: #e0e0e0;
+            display: flex; flex-direction: column; align-items: center; gap: 20px;
+            padding: 40px 0;
+        `;
+        // Loading Indicator
+        container.innerHTML = `
+            <div id="bme-pdf-loader" style="display:flex; flex-direction:column; align-items:center; gap:15px; margin-top:100px;">
+                <div style="width: 40px; height: 40px; border: 4px solid #ddd; border-top-color: #0163DD; border-radius: 50%; animation: bme-spin 1s linear infinite;"></div>
+                <div style="color: #666; font-weight: 500;">Chargement de la copie...</div>
+            </div>
+            <style>
+                @keyframes bme-spin { to { transform: rotate(360deg); } }
+            </style>
+        `;
+
+        wrapper.appendChild(container);
+
+        // Add to DOM logic
+        document.body.style.overflow = 'hidden'; // Lock scrolling
+        document.body.appendChild(wrapper);
+        requestAnimationFrame(() => wrapper.style.opacity = '1');
+
+        // Logic variables
+        let pdfDoc = null;
+        let scale = 1.0;
+        let isRendering = false;
+
+        // Close logic
+        const close = () => {
+            wrapper.style.opacity = '0';
+            document.body.style.overflow = '';
+            setTimeout(() => wrapper.remove(), 300);
+        };
+        toolbar.querySelector('#bme-pdf-close').addEventListener('click', close);
+        // wrapper.addEventListener('click', (e) => { if (e.target === container) close(); });
+
+        // Render Page Function
+        const renderPage = async (num) => {
+            try {
+                const page = await pdfDoc.getPage(num);
+                // Adjust for High DPI (Retina) displays
+                const outputScale = window.devicePixelRatio || 1;
+                // Base viewport at current zoom scale
+                const viewport = page.getViewport({ scale: scale });
+
+                // Check if canvas exists for this page, else create it
+                let canvas = container.querySelector(`#bme-pdf-page-${num}`);
+                if (!canvas) {
+                    const pageWrapper = document.createElement('div');
+                    pageWrapper.style.cssText = 'box-shadow: 0 4px 15px rgba(0,0,0,0.1); background: white; transition: all 0.2s;';
+                    canvas = document.createElement('canvas');
+                    canvas.id = `bme-pdf-page-${num}`;
+                    canvas.style.display = 'block';
+                    pageWrapper.appendChild(canvas);
+                    container.appendChild(pageWrapper);
+                }
+
+                const context = canvas.getContext('2d');
+
+                // Set dimensions for high resolution
+                canvas.width = Math.floor(viewport.width * outputScale);
+                canvas.height = Math.floor(viewport.height * outputScale);
+
+                // Scale down visually in CSS
+                canvas.style.width = Math.floor(viewport.width) + "px";
+                canvas.style.height = Math.floor(viewport.height) + "px";
+
+                const renderContext = {
+                    canvasContext: context,
+                    viewport: viewport,
+                    transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null
+                };
+
+                await page.render(renderContext).promise;
+            } catch (e) {
+                console.error('BME: Render error on page ' + num, e);
+            }
+        };
+
+        const renderAllPages = async () => {
+            if (isRendering || !pdfDoc) return;
+            isRendering = true;
+
+            // Clear container but keep loader if needed? No, full clear.
+            // container.innerHTML = ''; // Actually we want to update existing canvases if zooming
+
+            // If zooming, we just re-render into existing or new canvases
+            // Simple approach: clear and rebuild for cleanliness on zoom
+            container.innerHTML = '';
+
+            for (let i = 1; i <= pdfDoc.numPages; i++) {
+                await renderPage(i);
+            }
+            isRendering = false;
+
+            // Update Zoom Display
+            toolbar.querySelector('#bme-pdf-scale-val').textContent = Math.round(scale * 100) + '%';
+        };
+
+        // Zoom Logic
+        toolbar.querySelector('#bme-pdf-zoom-in').addEventListener('click', () => {
+            if (scale < 3.0) { scale += 0.25; renderAllPages(); }
+        });
+        toolbar.querySelector('#bme-pdf-zoom-out').addEventListener('click', () => {
+            if (scale > 0.5) { scale -= 0.25; renderAllPages(); }
+        });
+
+        // Initialize
+        (async () => {
+            try {
+                const pdfjs = await loadPdfJsLibrary();
+
+                // Fetch the PDF blob with authentication cookies (browser handles cookies automatically)
+                const response = await fetch(fileUrl);
+                if (!response.ok) throw new Error('Download failed');
+
+                // Try to get filename from headers, fallback to path parsing
+                let filename = `Copie_Efrei_${title.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+                const disposition = response.headers.get('Content-Disposition');
+                if (disposition && disposition.includes('filename=')) {
+                    const match = disposition.match(/filename="?([^"]+)"?/);
+                    if (match && match[1]) filename = match[1];
+                } else if (filePath) {
+                    // Extract basename from path (e.g. "path/to/file.pdf" -> "file.pdf")
+                    // Handle both forward and backward slashes just in case
+                    const cleanPath = filePath.replace(/\\/g, '/');
+                    const parts = cleanPath.split('/');
+                    if (parts.length > 0) filename = parts[parts.length - 1];
+                }
+
+                const blob = await response.blob();
+
+                // Setup Download Button
+                const blobUrl = URL.createObjectURL(blob);
+                const dlBtn = toolbar.querySelector('#bme-pdf-download');
+                dlBtn.href = blobUrl;
+                dlBtn.download = filename;
+
+                // Load Document
+                const arrayBuffer = await blob.arrayBuffer();
+                pdfDoc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
+
+                // Better initial scale calculation
+                // Render at 1.0 initially unless it's huge? 
+                // Let's stick to 1.0 but high res.
+                scale = 1.0;
+
+                container.innerHTML = ''; // Remove loader
+                await renderAllPages();
+
+            } catch (err) {
+                console.error('BME: PDF Load Error', err);
+                container.innerHTML = `
+                    <div style="text-align:center; padding: 40px; color: #d32f2f;">
+                        <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+                        <h3>Erreur de chargement</h3>
+                        <p>${err.message}</p>
+                        <a href="${fileUrl}" style="color:#0163DD; text-decoration:underline; margin-top:20px; display:inline-block;">Essayer de télécharger directement</a>
+                    </div>
+                `;
+            }
+        })();
+    }
+
+    function renderGradesFromData(data, container) {
+        if (!data || !data.grades || !data.grades.ues) return;
+
+        container.innerHTML = '';
+        const grid = document.createElement('div');
+        grid.className = 'bme-grade-grid';
+
+        // Helper to format float or handle null
+        // Rules: Max 2 decimals. Remove trailing zeros/dot. 16.00 -> 16, 16.70 -> 16.7, 19.067 -> 19.07
+        const fmt = (v) => {
+            if (v === null || v === undefined) return '-';
+            const num = parseFloat(v);
+            if (isNaN(num)) return v;
+            const rounded = Math.round(num * 100) / 100;
+            return rounded.toString().replace('.', ',');
+        };
+
+        const fmtECTS = (v) => {
+            if (v === null || v === undefined) return null;
+            const num = parseFloat(v);
+            return isNaN(num) ? v : num.toString();
+        };
+
+        const fmtCoef = (v) => {
+            if (v === null || v === undefined) return '';
+            const num = parseFloat(v);
+            if (isNaN(num)) return v;
+            // Reduce decimals as much as possible, consistent with "0.2000" -> "0.2"
+            return num.toString().replace('.', ',');
+        };
+
+        data.grades.ues.forEach(ue => {
+            // UE Header
+            const ueHeader = document.createElement('div');
+            ueHeader.className = 'bme-ue-header';
+
+            // ECTS Logic
+            const earnedStr = fmtCoef(ue.ectsEarned);
+            const attemptedStr = fmtCoef(ue.ectsAttempted);
+
+            // Logic: if attempted exists, show "earned/attempted". If earned is empty/null, show "-".
+            let ectsLabel = '';
+            if (attemptedStr !== '') {
+                const num = (earnedStr !== '') ? earnedStr : '-';
+                ectsLabel = `${num}/${attemptedStr} ECTS`;
+            }
+
+            let statsHtml = '';
+            if (ectsLabel) {
+                statsHtml += `<span class="bme-ue-ects">${ectsLabel}</span>`;
+            }
+            if (ue.grade !== null && ue.grade !== undefined) {
+                statsHtml += `<span class="bme-ue-average">${fmt(ue.grade)}</span>`;
+            }
+
+            // UE Name/Code Parsing
+            let displayCode = ue.code;
+            let displayName = ue.name;
+
+            // Only apply splitting logic if the code is the long internal format (starts with DIP)
+            if (ue.code && ue.code.startsWith('DIP')) {
+                if (displayName && displayName.includes(' - ')) {
+                    const parts = displayName.split(' - ');
+                    if (parts.length >= 2) {
+                        displayCode = parts[0];
+                        // Join the rest back in case there are multiple dashes
+                        displayName = parts.slice(1).join(' - ');
                     }
                 }
             }
+
+            ueHeader.innerHTML = `
+                 <div class="bme-ue-info">
+                     ${displayCode ? `<span class="bme-ue-code">${displayCode}</span>` : ''}
+                     <span class="bme-ue-name">${displayName}</span>
+                 </div>
+                 <div class="bme-ue-stats">${statsHtml}</div>
+              `;
+            grid.appendChild(ueHeader);
+
+            // Modules
+            if (ue.modules) {
+                ue.modules.forEach(mod => {
+                    const card = document.createElement('div');
+                    card.className = 'bme-grade-card';
+
+                    const header = document.createElement('div');
+                    header.className = 'bme-grade-header';
+                    header.innerHTML = `
+                         <div class="bme-grade-title">${mod.name}</div>
+                         <div class="bme-grade-code">${mod.code}</div>
+                      `;
+                    card.appendChild(header);
+
+                    // Average
+                    const avgContainer = document.createElement('div');
+                    avgContainer.className = 'bme-grade-average-container';
+
+                    const avgDiv = document.createElement('div');
+                    avgDiv.className = 'bme-grade-average';
+                    const avgVal = mod.grade !== null ? parseFloat(mod.grade) : null;
+                    avgDiv.textContent = fmt(mod.grade);
+
+                    if (avgVal !== null) {
+                        if (avgVal < 10) avgDiv.style.color = '#d32f2f';
+                        else if (avgVal < 12) avgDiv.style.color = '#f57c00';
+                        else avgDiv.style.color = '#388e3c';
+                    } else {
+                        avgDiv.style.color = '#999';
+                    }
+                    avgContainer.appendChild(avgDiv);
+
+                    if (mod.coef) {
+                        const coefDiv = document.createElement('div');
+                        coefDiv.className = 'bme-grade-coef';
+                        coefDiv.textContent = `Coef: ${fmtCoef(mod.coef)}`;
+                        avgContainer.appendChild(coefDiv);
+                    }
+                    card.appendChild(avgContainer);
+
+                    // Details
+                    const details = document.createElement('div');
+                    details.className = 'bme-grade-details';
+
+                    if (mod.grades) {
+                        mod.grades.forEach(g => {
+                            const row = document.createElement('div');
+                            row.className = 'bme-grade-detail-row';
+
+                            const detailType = g.courseActivity || g.type || 'N/A';
+
+                            let examAction = '';
+                            if (g.examFile) {
+                                examAction = `
+                                     <div class="bme-exam-btn" style="cursor:pointer; display:flex; align-items:center; margin-left:12px; transition: transform 0.2s;" title="Voir la copie">
+                                         ${BME_ICONS.exam}
+                                     </div>
+                                  `;
+                            }
+
+                            row.innerHTML = `
+                                 <div class="bme-detail-left">
+                                     <span class="bme-detail-type"><b>${detailType}</b></span>
+                                     ${g.coef ? `<span class="bme-detail-coef">${fmtCoef(g.coef)}</span>` : ''}
+                                     ${examAction}
+                                 </div>
+                                 <span>${fmt(g.grade)}</span>
+                              `;
+
+                            if (g.examFile) {
+                                const btn = row.querySelector('.bme-exam-btn');
+                                if (btn) {
+                                    btn.addEventListener('click', (e) => {
+                                        e.stopPropagation();
+                                        openExamPdfJsModal(`Copie: ${mod.name} - ${detailType}`, g.examFile);
+                                    });
+                                    btn.addEventListener('mouseenter', () => btn.style.transform = 'scale(1.1)');
+                                    btn.addEventListener('mouseleave', () => btn.style.transform = 'scale(1)');
+                                }
+                            }
+
+                            details.appendChild(row);
+                        });
+                    }
+                    card.appendChild(details);
+                    grid.appendChild(card);
+                });
+            }
         });
 
-        // Hide original table and append new container
+        container.appendChild(grid);
+    }
+
+    whenItemLoaded('table.MuiTable-root', (table) => {
+        // Only on grades page (check title or URL)
+        if (!location.href.includes('/grades')) {
+            const title = document.querySelector('h1');
+            if (!title || !title.textContent.includes('Notes')) return;
+        }
+
+        // Avoid double processing
+        if (table.getAttribute('data-bme-replaced') === '1') return;
+
+        // Hide original table
         table.style.display = 'none';
+        table.setAttribute('data-bme-replaced', '1');
+
+        // Prepare our container
+        // Use a class-based approach to handle potential re-renders where multiple containers might exist temporarily
+        let container = document.createElement('div');
+        container.className = 'bme-grades-custom-container';
         table.parentNode.appendChild(container);
-        table.setAttribute('data-bme-processed', '1');
+
+        const updateView = (data) => {
+            if (data) {
+                renderGradesFromData(data, container);
+            }
+        };
+
+        if (latestGradesData) {
+            updateView(latestGradesData);
+        } else {
+            // Try to fetch default ONLY if we haven't successfully intercepted anything yet
+            if (!w.bmeHasFetchedDefault) {
+                w.bmeHasFetchedDefault = true;
+                fetchDefaultGrades().then(data => {
+                    // Only apply if we still don't have fresh data from interceptor
+                    if (!latestGradesData && data) {
+                        latestGradesData = data;
+                        updateView(data);
+                    }
+                });
+            }
+        }
     });
+
+    // Global listener for updates - Updates ALL existing containers (handles duplicates/zombies safely)
+    // This ensures that when a semester changes, ALL current grade views are updated.
+    if (!w.bmeGradesListenerAdded) {
+        w.addEventListener('bme-grades-update', (e) => {
+            console.log('BME: Updating all grade containers with new data');
+            const containers = document.querySelectorAll('.bme-grades-custom-container');
+            containers.forEach(c => renderGradesFromData(e.detail, c));
+        });
+        w.bmeGradesListenerAdded = true;
+    }
 
 })();
