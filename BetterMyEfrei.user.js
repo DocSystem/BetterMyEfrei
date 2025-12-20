@@ -1396,7 +1396,64 @@
                          <div class="bme-grade-title">${mod.name}</div>
                          <div class="bme-grade-code">${mod.code}</div>
                       `;
+
+                    // Teachers Display inside Header
+                    if (mod.teachers && mod.teachers.length > 0) {
+                        const tDiv = document.createElement('div');
+                        tDiv.className = 'bme-grade-teachers';
+                        tDiv.style.cssText = 'margin-top: 4px; font-size: 0.8rem; color: #666; display: flex; align-items: center; gap: 6px;';
+
+                        if (mod.teachers.length > 2) {
+                            tDiv.style.cursor = 'pointer';
+                            tDiv.style.transition = 'opacity 0.2s';
+                            tDiv.onmouseenter = () => tDiv.style.opacity = '0.7';
+                            tDiv.onmouseleave = () => tDiv.style.opacity = '1';
+                            tDiv.onclick = (e) => {
+                                e.stopPropagation();
+                                openTeacherPopover(e, mod.teachers, mod.name);
+                            };
+                        }
+
+                        const iconContainer = document.createElement('div');
+                        iconContainer.style.cssText = 'display: flex; opacity: 0.9;';
+                        iconContainer.innerHTML = BME_ICONS.teacher || '';
+                        const svg = iconContainer.querySelector('svg');
+                        if (svg) {
+                            svg.setAttribute('width', '14');
+                            svg.setAttribute('height', '14');
+                            svg.style.color = 'currentColor';
+                        }
+
+                        let label = mod.teachers[0];
+                        let extraLabel = '';
+
+                        if (mod.teachers.length === 2) {
+                            label += `, ${mod.teachers[1]}`;
+                        } else if (mod.teachers.length > 2) {
+                            label += `, ${mod.teachers[1]}`;
+                            extraLabel = ` (+${mod.teachers.length - 2})`;
+                        }
+
+                        const textSpan = document.createElement('span');
+                        textSpan.textContent = label;
+                        textSpan.style.cssText = 'white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
+
+                        tDiv.appendChild(iconContainer);
+                        tDiv.appendChild(textSpan);
+
+                        if (extraLabel) {
+                            const extraSpan = document.createElement('span');
+                            extraSpan.textContent = extraLabel;
+                            extraSpan.style.cssText = 'font-weight: 600; opacity: 1; margin-left:2px;';
+                            tDiv.appendChild(extraSpan);
+                        }
+
+
+
+                        header.appendChild(tDiv);
+                    }
                     card.appendChild(header);
+
 
                     // Average
                     const avgContainer = document.createElement('div');
@@ -1569,3 +1626,83 @@
     }
 
 })();
+
+// --- Teacher Popover Logic ---
+function openTeacherPopover(event, teachers, moduleName) {
+    // Remove existing
+    document.getElementById('bme-teacher-popover')?.remove();
+
+    const popover = document.createElement('div');
+    popover.id = 'bme-teacher-popover';
+
+    // Glassmorphism Styles
+    popover.style.cssText = `
+        position: fixed;
+        z-index: 10000;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+        padding: 16px;
+        min-width: 200px;
+        max-width: 300px;
+        font-family: 'Roboto', sans-serif;
+        animation: bme-fade-in 0.2s ease-out;
+    `;
+
+    // Header
+    const header = document.createElement('div');
+    header.style.cssText = 'font-weight: bold; color: #333; margin-bottom: 12px; font-size: 0.95rem; border-bottom: 1px solid #eee; padding-bottom: 8px;';
+    header.textContent = 'Intervenants';
+    popover.appendChild(header);
+
+    // List
+    const list = document.createElement('div');
+    list.style.cssText = 'display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto;';
+
+    teachers.forEach(t => {
+        const item = document.createElement('div');
+        item.style.cssText = 'display: flex; align-items: center; gap: 8px; font-size: 0.9rem; color: #555;';
+        item.innerHTML = `
+            <div style="width: 6px; height: 6px; background: #0163DD; border-radius: 50%;"></div>
+            <span>${t}</span>
+        `;
+        list.appendChild(item);
+    });
+    popover.appendChild(list);
+
+    // Calculate Position
+    const rect = event.currentTarget.getBoundingClientRect();
+    let top = rect.bottom + 10;
+    let left = rect.left;
+
+    // Adjust if off-screen
+    if (left + 250 > window.innerWidth) left = window.innerWidth - 270;
+    if (top + 200 > window.innerHeight) top = rect.top - 200; // Show above if too low
+
+    popover.style.top = top + 'px';
+    popover.style.left = left + 'px';
+
+    // Close logic
+    const close = (e) => {
+        if (!popover.contains(e.target) && e.target !== event.currentTarget) {
+            popover.remove();
+            document.removeEventListener('click', close);
+        }
+    };
+
+    // Slight delay to avoid immediate close from bubble event
+    setTimeout(() => document.addEventListener('click', close), 50);
+
+    document.body.appendChild(popover);
+}
+
+// Add keyframes for fade-in
+if (!document.getElementById('bme-popover-anim')) {
+    const s = document.createElement('style');
+    s.id = 'bme-popover-anim';
+    s.textContent = `@keyframes bme-fade-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }`;
+    document.head.appendChild(s);
+}
