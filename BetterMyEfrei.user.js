@@ -1129,299 +1129,177 @@
 
     // Ensure PDF.js is properly configured with the worker using multiple fallbacks
     async function loadPdfJsLibrary() {
-        if (!window.pdfjsLib) {
-            throw new Error('PDF.js not loaded (require failed)');
-        }
+        if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions.workerSrc) return window.pdfjsLib;
+        if (!window.pdfjsLib) throw new Error('PDF.js not loaded (require failed)');
 
-        if (!window.pdfjsLib.GlobalWorkerOptions.workerSrc) {
-            console.log('BME: Configuring PDF.js worker...');
-            let workerBlobUrl = null;
+        console.log('BME: Configuring PDF.js worker...');
 
-            // Strategy 1: GM_getResourceText (standard way to get local resource content)
-            try {
-                if (typeof GM_getResourceText !== 'undefined') {
-                    const workerScript = GM_getResourceText('PDF_WORKER');
-                    if (workerScript) {
-                        console.log('BME: Loaded worker via GM_getResourceText');
-                        const p = new Blob([workerScript], { type: 'text/javascript' });
-                        workerBlobUrl = URL.createObjectURL(p);
-                    }
-                }
-            } catch (e) { console.warn('BME: GM_getResourceText failed', e); }
-
-            // Strategy 2: GM_getResourceURL (some managers provide a direct url)
-            if (!workerBlobUrl) {
-                try {
-                    if (typeof GM_getResourceURL !== 'undefined') {
-                        const url = GM_getResourceURL('PDF_WORKER');
-                        if (url) {
-                            console.log('BME: Loaded worker via GM_getResourceURL', url);
-                            workerBlobUrl = url;
-                        }
-                    }
-                } catch (e) { console.warn('BME: GM_getResourceURL failed', e); }
-            }
-
-            // Strategy 3: GM_xmlhttpRequest (nuclear option: fetch from CDN bypasses CSP)
-            if (!workerBlobUrl) {
-                console.log('BME: Attempting to fetch worker via GM_xmlhttpRequest...');
-                try {
-                    if (typeof GM_xmlhttpRequest !== 'undefined') {
-                        workerBlobUrl = await new Promise((resolve) => {
-                            GM_xmlhttpRequest({
-                                method: "GET",
-                                url: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
-                                onload: function (response) {
-                                    console.log('BME: GM_xmlhttpRequest success');
-                                    const p = new Blob([response.responseText], { type: 'text/javascript' });
-                                    resolve(URL.createObjectURL(p));
-                                },
-                                onerror: function (err) {
-                                    console.error('BME: GM_xmlhttpRequest failed', err);
-                                    resolve(null);
-                                }
-                            });
-                        });
-                    }
-                } catch (e) { console.warn('BME: GM_xmlhttpRequest failed', e); }
-            }
-
-            if (workerBlobUrl) {
-                window.pdfjsLib.GlobalWorkerOptions.workerSrc = workerBlobUrl;
-            } else {
-                console.error('BME: Worker loading failed. Grants available?', {
-                    text: typeof GM_getResourceText,
-                    url: typeof GM_getResourceURL,
-                    xhr: typeof GM_xmlhttpRequest
+        const strategies = [
+            // Strategy 1: GM_getResourceText (standard)
+            () => {
+                if (typeof GM_getResourceText === 'undefined') return null;
+                const txt = GM_getResourceText('PDF_WORKER');
+                return txt ? URL.createObjectURL(new Blob([txt], { type: 'text/javascript' })) : null;
+            },
+            // Strategy 2: GM_getResourceURL (direct url)
+            () => (typeof GM_getResourceURL !== 'undefined' ? GM_getResourceURL('PDF_WORKER') : null),
+            // Strategy 3: GM_xmlhttpRequest (CDN fetch)
+            async () => {
+                if (typeof GM_xmlhttpRequest === 'undefined') return null;
+                return new Promise(resolve => {
+                    GM_xmlhttpRequest({
+                        method: "GET",
+                        url: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+                        onload: r => resolve(URL.createObjectURL(new Blob([r.responseText], { type: 'text/javascript' }))),
+                        onerror: () => resolve(null)
+                    });
                 });
-                throw new Error('Could not load PDF Worker via any method.');
+            }
+        ];
+
+        let workerSrc = null;
+        for (const strategy of strategies) {
+            try { workerSrc = await strategy(); } catch (e) { /* ignore */ }
+            if (workerSrc) {
+                console.log('BME: Worker loaded successfully via strategy');
+                break;
             }
         }
+
+        if (!workerSrc) throw new Error('Could not load PDF Worker via any method.');
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
         return window.pdfjsLib;
     }
 
+    // Modal Styles Map
+    const PDF_STYLES = {
+        wrapper: `position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; flex-direction: column; z-index: 1400; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); opacity: 0; transition: opacity 0.3s ease;`,
+        toolbar: `flex: 0 0 60px; display: flex; align-items: center; justify-content: space-between; padding: 0 30px; border-bottom: 1px solid rgba(0,0,0,0.1); box-shadow: 0 2px 10px rgba(0,0,0,0.05); background: white;`,
+        container: `flex: 1; overflow: auto; background: #e0e0e0; display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 40px 0;`,
+        btn: `border:none; background:white; width:32px; height:32px; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: all 0.2s;`,
+        dlBtn: `border: 1px solid #0163DD; background: #0163DD; color: white; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 8px; transition: all 0.2s;`,
+        loader: `display:flex; flex-direction:column; align-items:center; gap:15px; margin-top:100px;`
+    };
+
     function openExamPdfJsModal(title, filePath) {
-        const fileUrl = `https://www.myefrei.fr/api/rest/student/exam-file?pathname=${filePath}`;
-        console.log('BME: Opening custom PDF.js modal for', title);
+        // Cleanup existing
+        document.getElementById('bme-exam-modal-wrapper')?.remove();
 
-        // Remove existing modal if any
-        const existing = document.getElementById('bme-exam-modal-wrapper');
-        if (existing) existing.remove();
-
-        // Styles
-        const glassStyle = 'background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px);';
-        const modalStyle = `
-            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
-            display: flex; flex-direction: column; z-index: 1400;
-            ${glassStyle}
-            opacity: 0; transition: opacity 0.3s ease;
-        `;
-
-        // Create Wrapper
         const wrapper = document.createElement('div');
         wrapper.id = 'bme-exam-modal-wrapper';
-        wrapper.style.cssText = modalStyle;
+        wrapper.style.cssText = PDF_STYLES.wrapper;
 
-        // --- Toolbar ---
-        const toolbar = document.createElement('div');
-        toolbar.style.cssText = `
-            flex: 0 0 60px; display: flex; align-items: center; justify-content: space-between;
-            padding: 0 30px; border-bottom: 1px solid rgba(0,0,0,0.1); box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-            background: white;
-        `;
-
-        toolbar.innerHTML = `
-            <div style="font-weight: 600; font-size: 1.1rem; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw;">
-                ${title}
-            </div>
-            <div style="display: flex; gap: 15px; align-items: center;">
-                <div style="display: flex; gap: 5px; background: #f5f5f5; padding: 4px; border-radius: 8px;">
-                    <button id="bme-pdf-zoom-out" title="Dézoomer" style="border:none; background:white; width:32px; height:32px; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: all 0.2s;">
-                         <svg viewBox="0 0 24 24" width="18" height="18" fill="#555"><path d="M19 13H5v-2h14v2z"/></svg>
-                    </button>
-                    <span id="bme-pdf-scale-val" style="min-width: 50px; text-align: center; font-variant-numeric: tabular-nums; line-height:32px; font-size: 0.9rem; color:#666;">100%</span>
-                    <button id="bme-pdf-zoom-in" title="Zoomer" style="border:none; background:white; width:32px; height:32px; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: all 0.2s;">
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="#555"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        // Construct UI
+        wrapper.innerHTML = `
+            <div style="${PDF_STYLES.toolbar}">
+                <div style="font-weight: 600; font-size: 1.1rem; color: #333; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw;">${title}</div>
+                <div style="display: flex; gap: 15px; align-items: center;">
+                    <div style="display: flex; gap: 5px; background: #f5f5f5; padding: 4px; border-radius: 8px;">
+                        <button id="bme-btn-out" title="Dézoomer" style="${PDF_STYLES.btn}"><svg viewBox="0 0 24 24" width="18" height="18" fill="#555"><path d="M19 13H5v-2h14v2z"/></svg></button>
+                        <span id="bme-scale-val" style="min-width: 50px; text-align: center; font-variant-numeric: tabular-nums; line-height:32px; font-size: 0.9rem; color:#666;">100%</span>
+                        <button id="bme-btn-in" title="Zoomer" style="${PDF_STYLES.btn}"><svg viewBox="0 0 24 24" width="18" height="18" fill="#555"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></button>
+                    </div>
+                    <a id="bme-dl-link" href="#" target="_blank" style="text-decoration: none;">
+                        <button style="${PDF_STYLES.dlBtn}">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"></path></svg>
+                            Télécharger
+                        </button>
+                    </a>
+                    <button id="bme-close" style="border: none; background: transparent; cursor: pointer; color: #666; display: flex; padding: 5px;">
+                        <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></svg>
                     </button>
                 </div>
-                <a id="bme-pdf-download" href="#" target="_blank" style="text-decoration: none;">
-                    <button style="border: 1px solid #0163DD; background: #0163DD; color: white; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 8px; transition: all 0.2s;">
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"></path></svg>
-                        Télécharger
-                    </button>
-                </a>
-                <button id="bme-pdf-close" style="border: none; background: transparent; cursor: pointer; color: #666; display: flex; padding: 5px;">
-                    <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></svg>
-                </button>
+            </div>
+            <div id="bme-pdf-container" style="${PDF_STYLES.container}">
+                <div id="bme-loader" style="${PDF_STYLES.loader}">
+                    <div style="width: 40px; height: 40px; border: 4px solid #ddd; border-top-color: #0163DD; border-radius: 50%; animation: bme-spin 1s linear infinite;"></div>
+                    <div style="color: #666; font-weight: 500;">Chargement de la copie...</div>
+                </div>
+                <style>@keyframes bme-spin { to { transform: rotate(360deg); } }</style>
             </div>
         `;
 
-        wrapper.appendChild(toolbar);
-
-        // --- Container for Canvases ---
-        const container = document.createElement('div');
-        container.id = 'bme-pdf-container';
-        container.style.cssText = `
-            flex: 1; overflow: auto; background: #e0e0e0;
-            display: flex; flex-direction: column; align-items: center; gap: 20px;
-            padding: 40px 0;
-        `;
-        // Loading Indicator
-        container.innerHTML = `
-            <div id="bme-pdf-loader" style="display:flex; flex-direction:column; align-items:center; gap:15px; margin-top:100px;">
-                <div style="width: 40px; height: 40px; border: 4px solid #ddd; border-top-color: #0163DD; border-radius: 50%; animation: bme-spin 1s linear infinite;"></div>
-                <div style="color: #666; font-weight: 500;">Chargement de la copie...</div>
-            </div>
-            <style>
-                @keyframes bme-spin { to { transform: rotate(360deg); } }
-            </style>
-        `;
-
-        wrapper.appendChild(container);
-
-        // Add to DOM logic
-        document.body.style.overflow = 'hidden'; // Lock scrolling
+        document.body.style.overflow = 'hidden';
         document.body.appendChild(wrapper);
         requestAnimationFrame(() => wrapper.style.opacity = '1');
 
-        // Logic variables
-        let pdfDoc = null;
-        let scale = 1.0;
-        let isRendering = false;
+        // Logic Context
+        const ctx = { pdf: null, scale: 1.0, rendering: false };
+        const container = wrapper.querySelector('#bme-pdf-container');
+        const updateScaleUI = () => wrapper.querySelector('#bme-scale-val').textContent = Math.round(ctx.scale * 100) + '%';
 
-        // Close logic
-        const close = () => {
+        const render = async () => {
+            if (ctx.rendering || !ctx.pdf) return;
+            ctx.rendering = true;
+            container.innerHTML = ''; // Clear for redraw
+
+            const ratio = window.devicePixelRatio || 1;
+
+            for (let i = 1; i <= ctx.pdf.numPages; i++) {
+                try {
+                    const page = await ctx.pdf.getPage(i);
+                    const viewport = page.getViewport({ scale: ctx.scale });
+
+                    const div = document.createElement('div');
+                    div.style.cssText = 'box-shadow: 0 4px 15px rgba(0,0,0,0.1); background: white; transition: all 0.2s;';
+
+                    const canvas = document.createElement('canvas');
+                    canvas.width = Math.floor(viewport.width * ratio);
+                    canvas.height = Math.floor(viewport.height * ratio);
+                    canvas.style.cssText = `display:block; width: ${viewport.width}px; height: ${viewport.height}px;`;
+
+                    div.appendChild(canvas);
+                    container.appendChild(div);
+
+                    await page.render({
+                        canvasContext: canvas.getContext('2d'),
+                        viewport,
+                        transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : null
+                    }).promise;
+                } catch (e) { console.error('BME: Page render error', i, e); }
+            }
+            ctx.rendering = false;
+            updateScaleUI();
+        };
+
+        // Events
+        wrapper.querySelector('#bme-btn-in').onclick = () => { if (ctx.scale < 3) { ctx.scale += 0.25; render(); } };
+        wrapper.querySelector('#bme-btn-out').onclick = () => { if (ctx.scale > 0.5) { ctx.scale -= 0.25; render(); } };
+
+        const closeModal = () => {
             wrapper.style.opacity = '0';
             document.body.style.overflow = '';
             setTimeout(() => wrapper.remove(), 300);
         };
-        toolbar.querySelector('#bme-pdf-close').addEventListener('click', close);
-        // wrapper.addEventListener('click', (e) => { if (e.target === container) close(); });
+        wrapper.querySelector('#bme-close').onclick = closeModal;
+        wrapper.addEventListener('click', e => { if (e.target === wrapper || e.target === container) closeModal(); });
 
-        // Render Page Function
-        const renderPage = async (num) => {
-            try {
-                const page = await pdfDoc.getPage(num);
-                // Adjust for High DPI (Retina) displays
-                const outputScale = window.devicePixelRatio || 1;
-                // Base viewport at current zoom scale
-                const viewport = page.getViewport({ scale: scale });
-
-                // Check if canvas exists for this page, else create it
-                let canvas = container.querySelector(`#bme-pdf-page-${num}`);
-                if (!canvas) {
-                    const pageWrapper = document.createElement('div');
-                    pageWrapper.style.cssText = 'box-shadow: 0 4px 15px rgba(0,0,0,0.1); background: white; transition: all 0.2s;';
-                    canvas = document.createElement('canvas');
-                    canvas.id = `bme-pdf-page-${num}`;
-                    canvas.style.display = 'block';
-                    pageWrapper.appendChild(canvas);
-                    container.appendChild(pageWrapper);
-                }
-
-                const context = canvas.getContext('2d');
-
-                // Set dimensions for high resolution
-                canvas.width = Math.floor(viewport.width * outputScale);
-                canvas.height = Math.floor(viewport.height * outputScale);
-
-                // Scale down visually in CSS
-                canvas.style.width = Math.floor(viewport.width) + "px";
-                canvas.style.height = Math.floor(viewport.height) + "px";
-
-                const renderContext = {
-                    canvasContext: context,
-                    viewport: viewport,
-                    transform: outputScale !== 1 ? [outputScale, 0, 0, outputScale, 0, 0] : null
-                };
-
-                await page.render(renderContext).promise;
-            } catch (e) {
-                console.error('BME: Render error on page ' + num, e);
-            }
-        };
-
-        const renderAllPages = async () => {
-            if (isRendering || !pdfDoc) return;
-            isRendering = true;
-
-            // Clear container but keep loader if needed? No, full clear.
-            // container.innerHTML = ''; // Actually we want to update existing canvases if zooming
-
-            // If zooming, we just re-render into existing or new canvases
-            // Simple approach: clear and rebuild for cleanliness on zoom
-            container.innerHTML = '';
-
-            for (let i = 1; i <= pdfDoc.numPages; i++) {
-                await renderPage(i);
-            }
-            isRendering = false;
-
-            // Update Zoom Display
-            toolbar.querySelector('#bme-pdf-scale-val').textContent = Math.round(scale * 100) + '%';
-        };
-
-        // Zoom Logic
-        toolbar.querySelector('#bme-pdf-zoom-in').addEventListener('click', () => {
-            if (scale < 3.0) { scale += 0.25; renderAllPages(); }
-        });
-        toolbar.querySelector('#bme-pdf-zoom-out').addEventListener('click', () => {
-            if (scale > 0.5) { scale -= 0.25; renderAllPages(); }
-        });
-
-        // Initialize
+        // Load PDF
         (async () => {
             try {
-                const pdfjs = await loadPdfJsLibrary();
+                const lib = await loadPdfJsLibrary();
+                const res = await fetch(`https://www.myefrei.fr/api/rest/student/exam-file?pathname=${filePath}`);
+                if (!res.ok) throw new Error('Fetch failed');
 
-                // Fetch the PDF blob with authentication cookies (browser handles cookies automatically)
-                const response = await fetch(fileUrl);
-                if (!response.ok) throw new Error('Download failed');
+                // Filename logic
+                let fname = `Copie_${title.replace(/[^a-z0-9]/gi, '_')}.pdf`;
+                const disp = res.headers.get('Content-Disposition');
+                const match = disp && disp.match(/filename="?([^"]+)"?/);
+                if (match?.[1]) fname = match[1];
+                else if (filePath) fname = filePath.split('/').pop() || fname;
 
-                // Try to get filename from headers, fallback to path parsing
-                let filename = `Copie_Efrei_${title.replace(/[^a-z0-9]/gi, '_')}.pdf`;
-                const disposition = response.headers.get('Content-Disposition');
-                if (disposition && disposition.includes('filename=')) {
-                    const match = disposition.match(/filename="?([^"]+)"?/);
-                    if (match && match[1]) filename = match[1];
-                } else if (filePath) {
-                    // Extract basename from path (e.g. "path/to/file.pdf" -> "file.pdf")
-                    // Handle both forward and backward slashes just in case
-                    const cleanPath = filePath.replace(/\\/g, '/');
-                    const parts = cleanPath.split('/');
-                    if (parts.length > 0) filename = parts[parts.length - 1];
-                }
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
 
-                const blob = await response.blob();
+                const link = wrapper.querySelector('#bme-dl-link');
+                link.firstElementChild.onclick = () => { link.href = url; link.download = fname; };
 
-                // Setup Download Button
-                const blobUrl = URL.createObjectURL(blob);
-                const dlBtn = toolbar.querySelector('#bme-pdf-download');
-                dlBtn.href = blobUrl;
-                dlBtn.download = filename;
-
-                // Load Document
-                const arrayBuffer = await blob.arrayBuffer();
-                pdfDoc = await pdfjs.getDocument({ data: arrayBuffer }).promise;
-
-                // Better initial scale calculation
-                // Render at 1.0 initially unless it's huge? 
-                // Let's stick to 1.0 but high res.
-                scale = 1.0;
-
-                container.innerHTML = ''; // Remove loader
-                await renderAllPages();
-
+                ctx.pdf = await lib.getDocument({ data: await blob.arrayBuffer() }).promise;
+                container.innerHTML = '';
+                await render();
             } catch (err) {
-                console.error('BME: PDF Load Error', err);
-                container.innerHTML = `
-                    <div style="text-align:center; padding: 40px; color: #d32f2f;">
-                        <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
-                        <h3>Erreur de chargement</h3>
-                        <p>${err.message}</p>
-                        <a href="${fileUrl}" style="color:#0163DD; text-decoration:underline; margin-top:20px; display:inline-block;">Essayer de télécharger directement</a>
-                    </div>
-                `;
+                console.error(err);
+                container.innerHTML = `<div style="text-align:center; padding:40px; color:#d32f2f;"><h3>Erreur</h3><p>${err.message}</p></div>`;
             }
         })();
     }
@@ -1550,30 +1428,58 @@
                     const details = document.createElement('div');
                     details.className = 'bme-grade-details';
 
-                    if (mod.grades) {
-                        mod.grades.forEach(g => {
+                    // Recursive function to render grades
+                    const renderGradeList = (list, depth = 0) => {
+                        if (!list || list.length === 0) return;
+
+                        list.forEach(g => {
                             const row = document.createElement('div');
                             row.className = 'bme-grade-detail-row';
+
+                            // Basic Styles for row
+                            // We might want to add a class for subgrades if depth > 0
 
                             const detailType = g.courseActivity || g.type || 'N/A';
 
                             let examAction = '';
                             if (g.examFile) {
                                 examAction = `
-                                     <div class="bme-exam-btn" style="cursor:pointer; display:flex; align-items:center; margin-left:12px; transition: transform 0.2s;" title="Voir la copie">
-                                         ${BME_ICONS.exam}
-                                     </div>
-                                  `;
+                                <div class="bme-exam-btn" style="cursor:pointer; display:flex; align-items:center; margin-left:12px; transition: transform 0.2s;" title="Voir la copie">
+                                    ${BME_ICONS.exam}
+                                </div>
+                             `;
+                            }
+
+                            // Sub-grade handling
+                            let visualContent = '';
+                            if (depth > 0) {
+                                // Add indentation and arrow
+                                // Using a nice SVG arrow
+                                const arrowIcon = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="color:#9e9e9e; margin-right:8px; transform: scaleY(-1) rotate(-90deg);"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
+                                // Using "SubdirectoryArrowRight" lookalike path or standard arrow
+                                // standard navigation arrow: M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z is right arrow. 
+                                // Let's use a bent arrow for "subdirectory" look if possible, or just indent + right arrow.
+                                // Material "subdirectory_arrow_right" path: M19 15l-6 6-1.42-1.42L15.17 16H4V4h2v10h9.17l-3.59-3.58L13 9l6 6z
+                                const subArrow = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="color:#bdbdbd; margin-right:6px; flex-shrink:0;"><path d="M19 15l-6 6-1.42-1.42L15.17 16H4V4h2v10h9.17l-3.59-3.58L13 9l6 6z"></path></svg>`;
+
+                                visualContent = `
+                                <div style="display:flex; align-items:center;">
+                                    ${subArrow}
+                                    <span class="bme-detail-type" style="font-size:0.95em;">${detailType}</span>
+                                </div>
+                             `;
+                            } else {
+                                visualContent = `<span class="bme-detail-type"><b>${detailType}</b></span>`;
                             }
 
                             row.innerHTML = `
-                                 <div class="bme-detail-left">
-                                     <span class="bme-detail-type"><b>${detailType}</b></span>
-                                     ${g.coef ? `<span class="bme-detail-coef">${fmtCoef(g.coef)}</span>` : ''}
-                                     ${examAction}
-                                 </div>
-                                 <span>${fmt(g.grade)}</span>
-                              `;
+                             <div class="bme-detail-left">
+                                 ${visualContent}
+                                 ${g.coef ? `<span class="bme-detail-coef">${fmtCoef(g.coef)}</span>` : ''}
+                                 ${examAction}
+                             </div>
+                             <span>${fmt(g.grade)}</span>
+                          `;
 
                             if (g.examFile) {
                                 const btn = row.querySelector('.bme-exam-btn');
@@ -1588,7 +1494,16 @@
                             }
 
                             details.appendChild(row);
+
+                            // Check for children
+                            if (g.grades && g.grades.length > 0) {
+                                renderGradeList(g.grades, depth + 1);
+                            }
                         });
+                    };
+
+                    if (mod.grades) {
+                        renderGradeList(mod.grades, 0);
                     }
                     card.appendChild(details);
                     grid.appendChild(card);
