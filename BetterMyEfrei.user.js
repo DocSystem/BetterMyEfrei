@@ -1367,7 +1367,13 @@
         // Rules: Max 2 decimals. Remove trailing zeros/dot. 16.00 -> 16, 16.70 -> 16.7, 19.067 -> 19.07
         const fmt = (v) => {
             if (v === null || v === undefined) return '-';
-            const num = parseFloat(v);
+
+            let val = v;
+            if (typeof val === 'string') {
+                val = val.replace(',', '.');
+            }
+
+            const num = parseFloat(val);
             if (isNaN(num)) return v;
             const rounded = Math.round(num * 100) / 100;
             return rounded.toString().replace('.', ',');
