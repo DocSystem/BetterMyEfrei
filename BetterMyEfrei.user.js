@@ -1124,6 +1124,7 @@
 
     // Add Exam Icon to BME_ICONS
     BME_ICONS.exam = `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true" style="color:#0163DD;"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6z" fill="currentColor"/></svg>`;
+    BME_ICONS.sort = `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z" fill="currentColor"/></svg>`;
 
     // --- PDF.js Logic ---
 
@@ -1247,6 +1248,10 @@
                    </div>
 
                     <div style="display: flex; align-items: center; gap: 12px;">
+                        <button id="bme-btn-reorder" title="Réorganiser les pages (Livret A3)" style="${PDF_STYLES.btn}">
+                            ${BME_ICONS.sort}
+                        </button>
+                        <div style="width: 1px; height: 24px; background: #eee; margin: 0 4px;"></div>
                         <span id="bme-scale-val" style="font-variant-numeric: tabular-nums; font-weight: 500; color: #555; width: 45px; text-align: center;">100%</span>
                         <button id="bme-btn-out" title="Dézoomer" style="${PDF_STYLES.btn}"><svg viewBox="0 0 24 24" width="18" height="18" fill="#555"><path d="M19 13H5v-2h14v2z"/></svg></button>
                         <button id="bme-btn-in" title="Zoomer" style="${PDF_STYLES.btn}"><svg viewBox="0 0 24 24" width="18" height="18" fill="#555"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></button>
@@ -1276,47 +1281,112 @@
         requestAnimationFrame(() => wrapper.style.opacity = '1');
 
         // Logic Context
-        const ctx = { pdf: null, scale: 1.0, rendering: false };
+        // Logic Context
+        const ctx = { pdf: null, scale: 1.0, rendering: false, reorder: false, renderGen: 0 };
         const container = wrapper.querySelector('#bme-pdf-container');
         const updateScaleUI = () => wrapper.querySelector('#bme-scale-val').textContent = Math.round(ctx.scale * 100) + '%';
+        const reorderBtn = wrapper.querySelector('#bme-btn-reorder');
+        const btnIn = wrapper.querySelector('#bme-btn-in');
+        const btnOut = wrapper.querySelector('#bme-btn-out');
+
+        // Helper: Calculate page sequence based on current mode
+        const getPagesOrder = (numPages) => {
+            const pages = Array.from({ length: numPages }, (_, i) => i + 1);
+            if (!ctx.reorder) return pages;
+
+            // Booklet Reordering Algorithm (1, 2, N-1, N, 3, 4, N-3, N-2...) based on user input
+            const pairs = [];
+            for (let i = 0; i < numPages; i += 2) {
+                // Safely grab pairs (handle odd last page just in case)
+                if (i + 1 < numPages) pairs.push([pages[i], pages[i + 1]]);
+                else pairs.push([pages[i]]);
+            }
+
+            const evens = pairs.filter((_, i) => i % 2 === 0);
+            const odds = pairs.filter((_, i) => i % 2 !== 0);
+
+            // Logic: Even pairs come first (1-2, 3-4...), Odd pairs come last in reverse order (11-12, 9-10...)
+            // Concat arrays of arrays then flatten
+            const finalPairs = [...evens, ...odds.reverse()];
+            return finalPairs.flat();
+        };
 
         const render = async () => {
-            if (ctx.rendering || !ctx.pdf) return;
+            if (!ctx.pdf) return;
+
+            // Start new generation
+            ctx.renderGen++;
+            const myGen = ctx.renderGen;
+
             ctx.rendering = true;
             container.innerHTML = ''; // Clear for redraw
 
             const ratio = window.devicePixelRatio || 1;
+            const pageSequence = getPagesOrder(ctx.pdf.numPages);
 
-            for (let i = 1; i <= ctx.pdf.numPages; i++) {
-                try {
-                    const page = await ctx.pdf.getPage(i);
-                    const viewport = page.getViewport({ scale: ctx.scale });
+            try {
+                for (const pageNum of pageSequence) {
+                    // Check for cancellation
+                    if (ctx.renderGen !== myGen) return;
 
-                    const div = document.createElement('div');
-                    div.style.cssText = 'box-shadow: 0 4px 15px rgba(0,0,0,0.1); background: white; transition: all 0.2s;';
+                    try {
+                        const page = await ctx.pdf.getPage(pageNum);
 
-                    const canvas = document.createElement('canvas');
-                    canvas.width = Math.floor(viewport.width * ratio);
-                    canvas.height = Math.floor(viewport.height * ratio);
-                    canvas.style.cssText = `display:block; width: ${viewport.width}px; height: ${viewport.height}px;`;
+                        // Check again after async wait
+                        if (ctx.renderGen !== myGen) return;
 
-                    div.appendChild(canvas);
-                    container.appendChild(div);
+                        const viewport = page.getViewport({ scale: ctx.scale });
 
-                    await page.render({
-                        canvasContext: canvas.getContext('2d'),
-                        viewport,
-                        transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : null
-                    }).promise;
-                } catch (e) { console.error('BME: Page render error', i, e); }
+                        const div = document.createElement('div');
+                        div.style.cssText = 'box-shadow: 0 4px 15px rgba(0,0,0,0.1); background: white; transition: all 0.2s; position: relative;';
+
+                        const canvas = document.createElement('canvas');
+                        canvas.width = Math.floor(viewport.width * ratio);
+                        canvas.height = Math.floor(viewport.height * ratio);
+                        canvas.style.cssText = `display:block; width: ${viewport.width}px; height: ${viewport.height}px;`;
+
+                        div.appendChild(canvas);
+                        container.appendChild(div);
+
+                        await page.render({
+                            canvasContext: canvas.getContext('2d'),
+                            viewport,
+                            transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : null
+                        }).promise;
+                    } catch (e) {
+                        // Ignore errors if cancelled
+                        if (ctx.renderGen !== myGen) return;
+                        console.error('BME: Page render error', pageNum, e);
+                    }
+                }
+            } finally {
+                // Only reset rendering flag if we are theoretically still the active generation
+                // (Though strictly multiple running overlaps might exist, cleaner to just let the last one finish)
+                if (ctx.renderGen === myGen) {
+                    ctx.rendering = false;
+                    updateScaleUI();
+
+                    // Update button state visual
+                    reorderBtn.style.color = ctx.reorder ? '#0163DD' : '#555';
+                    reorderBtn.style.background = ctx.reorder ? '#eef6fc' : 'white';
+                }
             }
-            ctx.rendering = false;
-            updateScaleUI();
         };
 
         // Events
-        wrapper.querySelector('#bme-btn-in').onclick = () => { if (ctx.scale < 3) { ctx.scale += 0.25; render(); } };
-        wrapper.querySelector('#bme-btn-out').onclick = () => { if (ctx.scale > 0.5) { ctx.scale -= 0.25; render(); } };
+        btnIn.onclick = () => { if (ctx.scale < 3) { ctx.scale += 0.25; render(); } };
+        btnOut.onclick = () => { if (ctx.scale > 0.5) { ctx.scale -= 0.25; render(); } };
+
+        reorderBtn.onclick = () => {
+            // Immediate feedback
+            ctx.reorder = !ctx.reorder;
+
+            // Visual feedback instant (optimistic UI)
+            reorderBtn.style.color = ctx.reorder ? '#0163DD' : '#555';
+            reorderBtn.style.background = ctx.reorder ? '#eef6fc' : 'white';
+
+            render();
+        };
 
         const closeModal = () => {
             wrapper.style.opacity = '0';
@@ -1330,7 +1400,7 @@
         (async () => {
             try {
                 const lib = await loadPdfJsLibrary();
-                const res = await fetch(`https://www.myefrei.fr/api/rest/student/exam-file?pathname=${filePath}`);
+                const res = await fetch(`https://www.myefrei.fr/api/rest/student/exam/file?pathname=${encodeURIComponent(filePath)}`);
                 if (!res.ok) throw new Error('Fetch failed');
 
                 // Filename logic
