@@ -1463,6 +1463,12 @@
             return num.toString().replace('.', ',');
         };
 
+        // === Debugging Data Structure ===
+        console.log("BME: Received Data Object:", data);
+        console.log("BME: Data Keys:", Object.keys(data));
+        if (data.grades) console.log("BME: Grades Keys:", Object.keys(data.grades));
+        if (data.rattrapages) console.log("BME: Rattrapages Type:", typeof data.rattrapages, data.rattrapages);
+
         // Concatenate standard UEs and "unaffectedModules" if present
         const allUEs = [...(data.grades.ues || [])];
         if (data.grades.unaffectedModules && data.grades.unaffectedModules.modules && data.grades.unaffectedModules.modules.length > 0) {
@@ -1471,6 +1477,10 @@
                 isUnaffected: true // Flag to identify for styling
             });
         }
+
+        // === Rattrapage Logic Refactored: Nested in Modules ===
+        // No top-level injection needed as per new data structure finding.
+
 
         allUEs.forEach(ue => {
             // UE Header
@@ -1656,18 +1666,13 @@
                              `;
                             }
 
+                            // Color logic
+                            let gradeStyle = '';
+
                             // Sub-grade handling
                             let visualContent = '';
                             if (depth > 0) {
-                                // Add indentation and arrow
-                                // Using a nice SVG arrow
-                                const arrowIcon = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="color:#9e9e9e; margin-right:8px; transform: scaleY(-1) rotate(-90deg);"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
-                                // Using "SubdirectoryArrowRight" lookalike path or standard arrow
-                                // standard navigation arrow: M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z is right arrow. 
-                                // Let's use a bent arrow for "subdirectory" look if possible, or just indent + right arrow.
-                                // Material "subdirectory_arrow_right" path: M19 15l-6 6-1.42-1.42L15.17 16H4V4h2v10h9.17l-3.59-3.58L13 9l6 6z
                                 const subArrow = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="color:#bdbdbd; margin-right:6px; flex-shrink:0;"><path d="M19 15l-6 6-1.42-1.42L15.17 16H4V4h2v10h9.17l-3.59-3.58L13 9l6 6z"></path></svg>`;
-
                                 visualContent = `
                                 <div style="display:flex; align-items:center;">
                                     ${subArrow}
@@ -1711,6 +1716,71 @@
                         renderGradeList(mod.grades, 0);
                     }
                     card.appendChild(details);
+
+                    // === Rattrapage Frame ===
+                    // Use nested rattrapages from the module object directly
+                    const rattrapagesData = mod.rattrapages;
+
+                    if (rattrapagesData && rattrapagesData.length > 0) {
+                        const frame = document.createElement('div');
+                        frame.style.cssText = `
+                            margin-top: 15px;
+                            border: 1px solid #e0e0e0;
+                            border-left: 4px solid #f57c00;
+                            border-radius: 8px;
+                            background: #fff8f3;
+                            padding: 10px 15px;
+                        `;
+
+                        rattrapagesData.forEach(rt => {
+                            const rtRow = document.createElement('div');
+                            rtRow.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;';
+                            if (rattrapagesData.indexOf(rt) === rattrapagesData.length - 1) rtRow.style.marginBottom = '0';
+
+                            // Left: Label + Exam Icon
+                            const left = document.createElement('div');
+                            left.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+
+                            const label = document.createElement('span');
+                            label.innerHTML = `<b>Rattrapage</b>`;
+                            label.style.fontSize = '0.9em';
+                            left.appendChild(label);
+
+                            if (rt.examFile) {
+                                const btn = document.createElement('div');
+                                btn.style.cssText = 'cursor:pointer; display:flex; align-items:center; transition: transform 0.2s;';
+                                btn.title = "Voir la copie";
+                                btn.innerHTML = BME_ICONS.exam;
+                                btn.onclick = (e) => {
+                                    e.preventDefault(); e.stopPropagation();
+                                    openExamPdfJsModal(null, rt.examFile, rt.name, "Rattrapage");
+                                };
+                                btn.addEventListener('mouseenter', () => btn.style.transform = 'scale(1.1)');
+                                btn.addEventListener('mouseleave', () => btn.style.transform = 'scale(1)');
+                                left.appendChild(btn);
+                            }
+                            rtRow.appendChild(left);
+
+                            // Right: Grade
+                            const right = document.createElement('div');
+                            let color = '#333';
+                            if (rt.grade !== null) {
+                                const v = parseFloat(rt.grade);
+                                if (!isNaN(v)) {
+                                    if (v < 10) color = '#d32f2f'; // Red
+                                    else color = '#388e3c'; // Green
+                                }
+                            }
+                            right.textContent = fmt(rt.grade);
+                            right.style.color = color;
+                            right.style.fontWeight = 'bold';
+                            rtRow.appendChild(right);
+
+                            frame.appendChild(rtRow);
+                        });
+
+                        card.appendChild(frame);
+                    }
                     grid.appendChild(card);
                 });
             }
