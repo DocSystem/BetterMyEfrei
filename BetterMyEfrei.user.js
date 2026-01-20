@@ -6,16 +6,97 @@
 // @author       DocSystem & Doryan D. & Mathu_lmn & Mat15
 // @match        https://www.myefrei.fr/portal/student/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=www.myefrei.fr
-// @grant        none
+
+
 // @updateURL    https://github.com/DocSystem/BetterMyEfrei/raw/refs/heads/main/BetterMyEfrei.user.js
 // @downloadURL  https://github.com/DocSystem/BetterMyEfrei/raw/refs/heads/main/BetterMyEfrei.user.js
+// @require      https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js
+// @resource     PDF_WORKER https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js
+// @grant        GM_getResourceText
+// @grant        GM_getResourceURL
+
+
+// @grant        GM_xmlhttpRequest
+// @grant        unsafeWindow
+// @connect      cdnjs.cloudflare.com
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
+
+    // Access the page window (unsafeWindow) for interception, or fallback to standard window
+    const w = (typeof unsafeWindow !== 'undefined') ? unsafeWindow : window;
+
 
     // Markers to avoid reprocessing
     const PROCESSED_ATTR = 'data-bme-processed';
+
+    // === Better MyEfrei — API Interceptor for Grades ===
+    let latestGradesData = null;
+
+    function broadcastGradesUpdate(data) {
+        latestGradesData = data;
+        w.dispatchEvent(new CustomEvent('bme-grades-update', { detail: data }));
+    }
+
+    // Hook fetch to capture grades data transparently
+    const originalFetch = w.fetch;
+    w.fetch = async function (...args) {
+        const response = await originalFetch.apply(this, args);
+        try {
+            const url = response.url || (args[0] && (args[0].url || args[0]));
+            if (url && typeof url === 'string' && url.includes('/api/rest/student/grades')) {
+                const clone = response.clone();
+                clone.json().then(data => {
+                    broadcastGradesUpdate(data);
+                }).catch(e => console.error('BME: Failed to parse grades JSON', e));
+            }
+        } catch (e) {
+            console.error('BME: Fetch Interceptor Error', e);
+        }
+        return response;
+    };
+
+    // Hook XMLHttpRequest to capture grades data if fetch is not used (e.g. Axios)
+    const originalXHROpen = w.XMLHttpRequest.prototype.open;
+    const originalXHRSend = w.XMLHttpRequest.prototype.send;
+
+    w.XMLHttpRequest.prototype.open = function (method, url) {
+        this._bme_url = url; // Save URL for check in send/load
+        return originalXHROpen.apply(this, arguments);
+    };
+
+    window.XMLHttpRequest.prototype.send = function () {
+        this.addEventListener('load', function () {
+            try {
+                if (this._bme_url && typeof this._bme_url === 'string' && this._bme_url.includes('/api/rest/student/grades')) {
+                    const data = JSON.parse(this.responseText);
+                    broadcastGradesUpdate(data);
+                }
+            } catch (e) {
+                console.error('BME: XHR Interceptor Error', e);
+            }
+        });
+        return originalXHRSend.apply(this, arguments);
+    };
+
+    // Helper to fetch default grades safely
+    async function fetchDefaultGrades() {
+        try {
+            const semestersRes = await originalFetch('https://www.myefrei.fr/api/rest/student/semesters');
+            const semesters = await semestersRes.json();
+            const current = semesters.find(s => s.currentSemester) || semesters[0];
+            if (!current) return null;
+
+            const gradesRes = await originalFetch(`https://www.myefrei.fr/api/rest/student/grades?schoolYear=${current.schoolYear}&semester=${current.semester}`);
+            const data = await gradesRes.json();
+            broadcastGradesUpdate(data);
+            return data;
+        } catch (e) {
+            console.error('BME: Error fetching default grades', e);
+            return null;
+        }
+    }
 
     let CUSTOM_CSS = ``;
     const CUSTOM_CSS_ID = 'bme-custom-css';
@@ -114,17 +195,26 @@
             active: '#DBC0FF',
             border: '#C198F8',
             chipColor: '#FFFFFF'
+        },
+        'COURS.LANGUE': {
+            normal: '#E2EFFF',
+            hover: '#CCE2FF',
+            active: '#92C1FB',
+            border: '#0163DD',
+            chipColor: '#FFFFFF'
         }
     };
     CALENDAR_EVENT_COLORS.CTD = CALENDAR_EVENT_COLORS.TD;
     CALENDAR_EVENT_COLORS.TD20 = CALENDAR_EVENT_COLORS.TD;
     CALENDAR_EVENT_COLORS.CTP = CALENDAR_EVENT_COLORS.TP;
+    CALENDAR_EVENT_COLORS.CLG = CALENDAR_EVENT_COLORS['COURS.LANGUE'];
     for (let key of Object.keys(CALENDAR_EVENT_COLORS)) {
-        CUSTOM_CSS += `.course.course-${key}:not(.chip-color) { background-color: ${CALENDAR_EVENT_COLORS[key].normal} !important; }`;
-        CUSTOM_CSS += `.course.course-${key}:not(.chip-color):hover { background-color: ${CALENDAR_EVENT_COLORS[key].hover} !important; }`;
-        CUSTOM_CSS += `.course.course-${key}:not(.chip-color):active { background-color: ${CALENDAR_EVENT_COLORS[key].active} !important; }`;
-        CUSTOM_CSS += `.course.course-${key}.event-border { border-color: ${CALENDAR_EVENT_COLORS[key].border} !important; }`;
-        CUSTOM_CSS += `.course.course-${key}.chip-color { background-color: ${CALENDAR_EVENT_COLORS[key].border} !important; color: ${CALENDAR_EVENT_COLORS[key].chipColor}; }`;
+        const safeKey = key.replace(/\./g, '\\.');
+        CUSTOM_CSS += `.course.course-${safeKey}:not(.chip-color) { background-color: ${CALENDAR_EVENT_COLORS[key].normal} !important; }`;
+        CUSTOM_CSS += `.course.course-${safeKey}:not(.chip-color):hover { background-color: ${CALENDAR_EVENT_COLORS[key].hover} !important; }`;
+        CUSTOM_CSS += `.course.course-${safeKey}:not(.chip-color):active { background-color: ${CALENDAR_EVENT_COLORS[key].active} !important; }`;
+        CUSTOM_CSS += `.course.course-${safeKey}.event-border { border-color: ${CALENDAR_EVENT_COLORS[key].border} !important; }`;
+        CUSTOM_CSS += `.course.course-${safeKey}.chip-color { background-color: ${CALENDAR_EVENT_COLORS[key].border} !important; color: ${CALENDAR_EVENT_COLORS[key].chipColor}; }`;
     }
     if (!document.querySelector(`#${CUSTOM_CSS_ID}`)) {
         const cssElem = document.createElement('style');
@@ -147,15 +237,16 @@
 
     // Libellés corrigés
     const COURSE_TYPES = [
-        ['CM',  'CM (Cours magistral)'],
+        ['CM', 'CM (Cours magistral)'],
         ['CTD', 'CTD (Cours TD)'],
         ['TD20', 'TD20 (TD par groupes de 20)'],
-        ['TD',  'TD (Travaux dirigés)'],
+        ['TD', 'TD (Travaux dirigés)'],
         ['CTP', 'CTP (Cours TP)'],
-        ['TP',  'TP (Travaux pratiques)'],
+        ['TP', 'TP (Travaux pratiques)'],
         ['PRJ', 'PRJ (Projet)'],
         ['TPA', 'TPA (Travaux pratiques en autonomie)'],
-        ['IE',  'IE (Intervention Entreprise)'],
+        ['IE', 'IE (Intervention Entreprise)'],
+        ['CLG', 'Cours de langue'],
     ];
 
     const EXAM_COLOR = '#FF7EB8';
@@ -197,7 +288,7 @@
     }
 
     const obs = new MutationObserver(enhanceLegend);
-    obs.observe(document.documentElement, { childList:true, subtree:true });
+    obs.observe(document.documentElement, { childList: true, subtree: true });
     enhanceLegend();
 
     function whenItemLoaded(item, callback) {
@@ -257,7 +348,9 @@
             console.log(eventData);
 
             if (eventData && chipElem) {
-                const newText = String(eventData.courseActivity ?? '').trim();
+                let newText = String(eventData.courseActivity ?? '').trim();
+                if (newText === 'COURS.LANGUE') newText = 'CLG';
+
                 // Only update if different to avoid unnecessary mutations
                 if (newText && chipElem.textContent !== newText) {
                     chipElem.textContent = newText;
@@ -411,10 +504,10 @@
     `;
             document.head.appendChild(css);
         }
-    
+
         const WRAPPER_SEL = '.sc-bkrxz.dUSWYm'; // conteneur principal de la page planning
         const MOVED_ATTR = 'data-bme-ical-moved';
-    
+
         function findIcalAlert() {
             // On cible uniquement l’alerte iCal (texte + bouton/lien iCal)
             const alerts = Array.from(document.querySelectorAll('.MuiAlert-root[role="alert"]'));
@@ -422,97 +515,97 @@
                 const txt = (a.textContent || '').toLowerCase();
                 const hasIcalWords = /ical|télécharger au format ical|copier url ical|utc/.test(txt);
                 const hasIcalLink =
-                        a.querySelector('a[href*=".ics"], a[href*="ical"]') ||
-                        a.querySelector('a[href*="/api/"][href*="/student/planning/"]');
+                    a.querySelector('a[href*=".ics"], a[href*="ical"]') ||
+                    a.querySelector('a[href*="/api/"][href*="/student/planning/"]');
                 return hasIcalWords && hasIcalLink;
             }) || null;
         }
-    
+
         function moveIcalAlert() {
             if (location.pathname !== '/portal/student/planning') return;
             const alert = findIcalAlert();
             if (!alert) return;
-    
+
             // Marqueur + classe pour CSS spécifique
             alert.classList.add('bme-ical-alert');
-    
+
             if (alert.getAttribute(MOVED_ATTR) === '1') return;
-    
+
             const wrapper =
-                    alert.closest(WRAPPER_SEL) ||
-                    document.querySelector(WRAPPER_SEL);
-    
+                alert.closest(WRAPPER_SEL) ||
+                document.querySelector(WRAPPER_SEL);
+
             if (!wrapper) return;
-    
+
             // Place l’alerte tout en bas du wrapper (sans toucher la structure interne)
             if (wrapper.lastElementChild !== alert) {
                 wrapper.appendChild(alert);
             }
-    
+
             alert.setAttribute(MOVED_ATTR, '1');
         }
-    
+
         // Au chargement
         moveIcalAlert();
-    
+
         // Si React réinsère l’alerte ailleurs pendant la navigation interne, on la remet en bas
         const mo = new MutationObserver(() => moveIcalAlert());
         mo.observe(document.body, { childList: true, subtree: true });
     });
 
-whenItemLoaded('p.MuiTypography-body2', () => {
-    if (location.pathname !== '/portal/student/planning') return;
+    whenItemLoaded('p.MuiTypography-body2', () => {
+        if (location.pathname !== '/portal/student/planning') return;
 
-    const WRAPPER_SEL = '.sc-bkrxz.dUSWYm';
-    const MIRROR_ID = 'bme-sync-mirror';
-    const ORIGINAL_ATTR = 'data-bme-hidden';
+        const WRAPPER_SEL = '.sc-bkrxz.dUSWYm';
+        const MIRROR_ID = 'bme-sync-mirror';
+        const ORIGINAL_ATTR = 'data-bme-hidden';
 
-    function ensureMirror() {
-        let mirror = document.getElementById(MIRROR_ID);
-        if (!mirror) {
-            const wrapper = document.querySelector(WRAPPER_SEL);
-            if (!wrapper) return null;
-            mirror = document.createElement('p');
-            mirror.id = MIRROR_ID;
-            mirror.className = 'MuiTypography-root MuiTypography-body2';
-            mirror.style.opacity = '0.8';
-            mirror.style.fontStyle = 'italic';
-            mirror.style.marginTop = '1rem';
-            wrapper.appendChild(mirror);
+        function ensureMirror() {
+            let mirror = document.getElementById(MIRROR_ID);
+            if (!mirror) {
+                const wrapper = document.querySelector(WRAPPER_SEL);
+                if (!wrapper) return null;
+                mirror = document.createElement('p');
+                mirror.id = MIRROR_ID;
+                mirror.className = 'MuiTypography-root MuiTypography-body2';
+                mirror.style.opacity = '0.8';
+                mirror.style.fontStyle = 'italic';
+                mirror.style.marginTop = '1rem';
+                wrapper.appendChild(mirror);
+            }
+            return mirror;
         }
-        return mirror;
-    }
 
-    function findOriginal() {
-        return Array.from(document.querySelectorAll('p.MuiTypography-body2'))
-            .find(p => (p.textContent || '').toLowerCase().includes('dernière synchro.'));
-    }
+        function findOriginal() {
+            return Array.from(document.querySelectorAll('p.MuiTypography-body2'))
+                .find(p => (p.textContent || '').toLowerCase().includes('dernière synchro.'));
+        }
 
-    function syncMirror() {
+        function syncMirror() {
+            const original = findOriginal();
+            const mirror = ensureMirror();
+            if (!original || !mirror) return;
+
+            // Copier le texte
+            mirror.textContent = original.textContent;
+
+            // Cacher l'original une seule fois
+            if (!original.hasAttribute(ORIGINAL_ATTR)) {
+                original.style.display = 'none';
+                original.setAttribute(ORIGINAL_ATTR, '1');
+            }
+        }
+
+        // Initialisation
+        syncMirror();
+
+        // Observer UNIQUEMENT le texte de l’original
         const original = findOriginal();
-        const mirror = ensureMirror();
-        if (!original || !mirror) return;
-
-        // Copier le texte
-        mirror.textContent = original.textContent;
-
-        // Cacher l'original une seule fois
-        if (!original.hasAttribute(ORIGINAL_ATTR)) {
-            original.style.display = 'none';
-            original.setAttribute(ORIGINAL_ATTR, '1');
+        if (original) {
+            const observer = new MutationObserver(() => syncMirror());
+            observer.observe(original, { childList: true, characterData: true, subtree: true });
         }
-    }
-
-    // Initialisation
-    syncMirror();
-
-    // Observer UNIQUEMENT le texte de l’original
-    const original = findOriginal();
-    if (original) {
-        const observer = new MutationObserver(() => syncMirror());
-        observer.observe(original, { childList: true, characterData: true, subtree: true });
-    }
-});
+    });
 
 
 
@@ -660,6 +753,144 @@ whenItemLoaded('p.MuiTypography-body2', () => {
 
   .bme-modal .MuiTypography-body1,
   .bme-modal .MuiTypography-body2 { line-height:1.35; margin:0; }
+
+  .bme-grade-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 20px;
+    padding: 20px;
+    margin: 0 auto;
+    max-width: 1200px;
+  }
+  .bme-grade-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.2s;
+    border: 1px solid #e0e0e0;
+  }
+  .bme-grade-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 12px rgba(0,0,0,0.15);
+  }
+  .bme-grade-header {
+    background-color: #eef6fc; /* Elegant pastel blue */
+    margin: -20px -20px 15px -20px; /* Edge-to-edge */
+    padding: 15px 20px;
+    border-radius: 12px 12px 0 0;
+    border-bottom: 1px solid #e3ebf3;
+  }
+  .bme-grade-title {
+    font-weight: bold;
+    font-size: 1.1em;
+    color: #333;
+    margin-bottom: 4px;
+  }
+  .bme-grade-code {
+    font-size: 0.85em;
+    color: #666;
+  }
+  .bme-grade-average-container {
+    text-align: center;
+    margin: 10px 0;
+  }
+  .bme-grade-average {
+    font-size: 2.5em;
+    font-weight: bold;
+  }
+  .bme-grade-coef {
+    font-size: 0.9em;
+    color: #888;
+    margin-top: 4px;
+  }
+  .bme-grade-details {
+    margin-top: auto;
+    font-size: 0.9em;
+    background: #f9f9f9;
+    padding: 2px 10px;
+    border-radius: 8px;
+  }
+  .bme-grade-detail-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 0;
+    border-bottom: 1px dashed #eee;
+  }
+  .bme-detail-left {
+    display: flex;
+    align-items: center;
+  }
+  .bme-detail-type {
+    display: inline-block;
+    width: 45px; /* Fixed width for alignment */
+  }
+  .bme-detail-coef {
+    font-style: italic;
+    color: #666;
+  }
+  .bme-grade-detail-row:last-child {
+    border-bottom: none;
+  }
+  .bme-ue-header {
+    grid-column: 1 / -1;
+    background: #fff;
+    border-left: 4px solid #0163DD;
+    border: 1px solid #f0f0f0;
+    border-left-width: 4px;
+    padding: 12px 20px;
+    margin: 30px 0 15px 0;
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .bme-ue-info {
+    display: flex;
+    flex-direction: column;
+  }
+  .bme-ue-code {
+    font-size: 0.9em;
+    color: #666;
+    font-weight: bold;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+  }
+  .bme-ue-name {
+    font-size: 1.4em;
+    color: #333;
+    font-weight: bold;
+  }
+  .bme-ue-stats {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+  }
+  .bme-ue-ects {
+    display: inline-flex;
+    align-items: center;
+    background-color: #f0f7ff;
+    color: #0163DD;
+    border: 1px solid #d1e9ff;
+    padding: 5px 14px;
+    border-radius: 50px;
+    font-weight: 700;
+    font-size: 1.1em;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 4px rgba(1, 99, 221, 0.08);
+  }
+  .bme-ue-average {
+    background: #f3f4f6;
+    color: #333;
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-weight: bold;
+    font-size: 1.1em;
+    border: 1px solid #e5e7eb;
+  }
   `;
         document.head.appendChild(css);
     }
@@ -669,9 +900,10 @@ whenItemLoaded('p.MuiTypography-body2', () => {
         date: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="2"/><line x1="3" y1="9" x2="21" y2="9" stroke="currentColor" stroke-width="2"/><line x1="7" y1="3" x2="7" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><line x1="17" y1="3" x2="17" y2="5" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`,
         time: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" fill="none" stroke="currentColor" stroke-width="2"/><path d="M12 6v6h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`,
         room: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2c4.2 0 8 3.22 8 8.2 0 3.32-2.67 7.25-8 11.8-5.33-4.55-8-8.48-8-11.8C4 5.22 7.8 2 12 2Zm0 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor"/></svg>`,
-        group:`<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C23 14.17 18.33 13 16 13ZM8 13c-2.67 0-8 1.34-8 4v2h8v-2c0-.7.25-1.37.7-2-.9-.32-1.8-.5-2.7-.5Z" fill="currentColor"/></svg>`,
-        video:`<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2.2l3.8-2.5A1 1 0 0 1 23 7v10a1 1 0 0 1-1.2.9L17 15.4V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" fill="currentColor"/></svg>`,
-        teacher:`<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm0 2c-3.33 0-10 1.67-10 5v2h20v-2c0-3.33-6.67-5-10-5Z" fill="currentColor"/></svg>`
+        group: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm8 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C23 14.17 18.33 13 16 13ZM8 13c-2.67 0-8 1.34-8 4v2h8v-2c0-.7.25-1.37.7-2-.9-.32-1.8-.5-2.7-.5Z" fill="currentColor"/></svg>`,
+        video: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v2.2l3.8-2.5A1 1 0 0 1 23 7v10a1 1 0 0 1-1.2.9L17 15.4V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" fill="currentColor"/></svg>`,
+        teacher: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Zm0 2c-3.33 0-10 1.67-10 5v2h20v-2c0-3.33-6.67-5-10-5Z" fill="currentColor"/></svg>`,
+        exam: `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>`
     };
 
     /* Couleur par type */
@@ -684,7 +916,7 @@ whenItemLoaded('p.MuiTypography-body2', () => {
     /* Utils */
     function pickField(modal, labelPattern) {
         const title = Array.from(modal.querySelectorAll('.MuiTypography-body2'))
-        .find(p => labelPattern.test((p.textContent || '').trim()));
+            .find(p => labelPattern.test((p.textContent || '').trim()));
         if (!title) return null;
         const nodes = [];
         let n = title.nextElementSibling;
@@ -697,7 +929,7 @@ whenItemLoaded('p.MuiTypography-body2', () => {
 
     function getGroups(modal) {
         const t = Array.from(modal.querySelectorAll('.MuiTypography-body2'))
-        .find(p => /groupe/i.test(p.textContent || ''));
+            .find(p => /groupe/i.test(p.textContent || ''));
         if (!t) return { title: null, nodes: [], values: [] };
         const nodes = [];
         const values = [];
@@ -736,7 +968,7 @@ whenItemLoaded('p.MuiTypography-body2', () => {
                 });
             });
         });
-        modalObserver.observe(document.documentElement, { childList:true, subtree:true });
+        modalObserver.observe(document.documentElement, { childList: true, subtree: true });
     });
 
     function enhanceModal(modal, closeBtn) {
@@ -753,18 +985,22 @@ whenItemLoaded('p.MuiTypography-body2', () => {
         // Certains modals n’ajoutent pas la classe .course : on prend le premier chip si besoin
         let chip = modal.querySelector('.MuiChip-root.course') || modal.querySelector('.MuiChip-root');
         const titleEl =
-              modal.querySelector('h2.MuiTypography-root') ||
-              modal.querySelector('h3.MuiTypography-root') ||
-              modal.querySelector('h1.MuiTypography-root');
+            modal.querySelector('h2.MuiTypography-root') ||
+            modal.querySelector('h3.MuiTypography-root') ||
+            modal.querySelector('h1.MuiTypography-root');
 
         /* Détecter le type (CM/TD/TP/PRJ/IE/CTD/TD20/CTP) à partir du code module si possible */
         const codeModuleNode = Array.from(modal.querySelectorAll('.MuiTypography-root, p, span, div'))
-        .find(el => /^code module\s*:/i.test((el.textContent || '').trim()));
+            .find(el => /^code module\s*:/i.test((el.textContent || '').trim()));
         const codeModuleRaw = codeModuleNode?.textContent || '';
         // ex: "Code module : ST2ADB-2526PSA01CM (Cours magistral)"
         // → on garde l’identifiant entier mais on isole le suffixe CM/TD/TP/...
-        const typeFromCode = (codeModuleRaw.match(/([A-Z]{2,3})(?=\s*\(|$)/) || [,''])[1];
-        const typeText = (typeFromCode || chip?.textContent || 'CM').toUpperCase();
+        const typeFromCode = (codeModuleRaw.match(/([A-Z]{2,3})(?=\s*\(|$)/) || [, ''])[1];
+        let typeText = (typeFromCode || chip?.textContent || 'CM').toUpperCase();
+
+        if (modal.textContent.includes('COURS.LANGUE')) {
+            typeText = 'CLG';
+        }
 
         /* Couleur et libellé du chip (forcer CM/TD/TP/PRJ…) */
         modal.style.setProperty('--bme-color', getColorForType(typeText));
@@ -796,10 +1032,10 @@ whenItemLoaded('p.MuiTypography-body2', () => {
 
         let moduleId = '';
         const afterLabel = codeModuleRaw.replace(/^.*code module\s*:\s*/i, '');
-        moduleId = (afterLabel.match(/^([A-Z0-9-]+)/) || [,''])[1]
-        // fallback si le libellé a disparu / structure différente
-        || (codeModuleRaw.match(/\b([A-Z0-9]{2,}-[A-Z0-9-]{2,})\b/) || [,''])[1]
-        || '';
+        moduleId = (afterLabel.match(/^([A-Z0-9-]+)/) || [, ''])[1]
+            // fallback si le libellé a disparu / structure différente
+            || (codeModuleRaw.match(/\b([A-Z0-9]{2,}-[A-Z0-9-]{2,})\b/) || [, ''])[1]
+            || '';
 
         const codeP = document.createElement('p');
         codeP.className = 'bme-code';
@@ -871,8 +1107,8 @@ whenItemLoaded('p.MuiTypography-body2', () => {
         grid.appendChild(buildField({ label: 'Salle', icon: BME_ICONS.room, contentHTML: roomHTML }));
 
         const groupsHTML = (groupsInfo.values.length)
-        ? groupsInfo.values.map(g => `<span class="MuiTypography-root MuiTypography-body1"><b>${g}</b></span>`).join('')
-        : '';
+            ? groupsInfo.values.map(g => `<span class="MuiTypography-root MuiTypography-body1"><b>${g}</b></span>`).join('')
+            : '';
         grid.appendChild(buildField({ label: 'Groupe', icon: BME_ICONS.group, contentHTML: groupsHTML }));
 
         const teacherCell = buildField({ label: 'Intervenant(s)', icon: BME_ICONS.teacher, contentHTML: teacherHTML });
@@ -884,4 +1120,814 @@ whenItemLoaded('p.MuiTypography-body2', () => {
 
         contentHost.insertBefore(grid, header.nextSibling);
     }
+    // === Better MyEfrei — Grades Page Redesign ===
+
+    // Add Exam Icon to BME_ICONS
+    BME_ICONS.exam = `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true" style="color:#0163DD;"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zM6 20V4h7v5h5v11H6z" fill="currentColor"/></svg>`;
+    BME_ICONS.sort = `<svg class="bme-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 18h6v-2H3v2zM3 6v2h18V6H3zm0 7h12v-2H3v2z" fill="currentColor"/></svg>`;
+
+    // --- PDF.js Logic ---
+
+    // Ensure PDF.js is properly configured with the worker using multiple fallbacks
+    async function loadPdfJsLibrary() {
+        if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions.workerSrc) return window.pdfjsLib;
+        if (!window.pdfjsLib) throw new Error('PDF.js not loaded (require failed)');
+
+        console.log('BME: Configuring PDF.js worker...');
+
+        const strategies = [
+            // Strategy 1: GM_getResourceText (standard)
+            () => {
+                if (typeof GM_getResourceText === 'undefined') return null;
+                const txt = GM_getResourceText('PDF_WORKER');
+                return txt ? URL.createObjectURL(new Blob([txt], { type: 'text/javascript' })) : null;
+            },
+            // Strategy 2: GM_getResourceURL (direct url)
+            () => (typeof GM_getResourceURL !== 'undefined' ? GM_getResourceURL('PDF_WORKER') : null),
+            // Strategy 3: GM_xmlhttpRequest (CDN fetch)
+            async () => {
+                if (typeof GM_xmlhttpRequest === 'undefined') return null;
+                return new Promise(resolve => {
+                    GM_xmlhttpRequest({
+                        method: "GET",
+                        url: 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js',
+                        onload: r => resolve(URL.createObjectURL(new Blob([r.responseText], { type: 'text/javascript' }))),
+                        onerror: () => resolve(null)
+                    });
+                });
+            }
+        ];
+
+        let workerSrc = null;
+        for (const strategy of strategies) {
+            try { workerSrc = await strategy(); } catch (e) { /* ignore */ }
+            if (workerSrc) {
+                console.log('BME: Worker loaded successfully via strategy');
+                break;
+            }
+        }
+
+        if (!workerSrc) throw new Error('Could not load PDF Worker via any method.');
+        window.pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+        return window.pdfjsLib;
+    }
+
+    // Modal Styles Map
+    const PDF_STYLES = {
+        modalOverlay: `position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; display: flex; flex-direction: column; z-index: 1400; background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); opacity: 0; transition: opacity 0.3s ease;`,
+        header: `flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between; padding: 15px 30px; border-bottom: 1px solid rgba(0,0,0,0.1); box-shadow: 0 2px 10px rgba(0,0,0,0.05); background: white;`,
+        container: `flex: 1; overflow: auto; background: #e0e0e0; display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 40px 0;`,
+        btn: `border:none; background:white; width:32px; height:32px; border-radius:6px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow: 0 1px 3px rgba(0,0,0,0.1); transition: all 0.2s;`,
+        dlBtn: `border: 1px solid #0163DD; background: #0163DD; color: white; padding: 6px 16px; border-radius: 6px; cursor: pointer; font-weight: 500; display: flex; align-items: center; gap: 8px; transition: all 0.2s;`,
+        loader: `display:flex; flex-direction:column; align-items:center; gap:15px; margin-top:100px;`
+    };
+
+    function openExamPdfJsModal(title, filePath, moduleName, examType) {
+        // Cleanup existing
+        document.getElementById('bme-pdf-modal')?.remove();
+
+        // Date Parsing Logic
+        // Expected format: "2025\04\26\20220655-TE601-DE-11000000-2025-03-22.PDF"
+        // Publication Date: Start of string
+        // Exam Date: End of string (before extension)
+
+        let pubDateStr = '-';
+        let examDateStr = '-';
+
+        try {
+            // Normalize path separators to forward slashes for easier split/regex
+            const normalizedPath = filePath.replace(/\\/g, '/');
+            const parts = normalizedPath.split('/');
+            const filename = parts[parts.length - 1]; // "20220655-TE60...-2025-03-22.PDF"
+
+            // Publication Date: First 3 parts if they look like YYYY/MM/DD
+            // Or just parsing the beginning of the string string "2025\04\26"
+            // Let's rely on standard path structure if consistent
+            if (parts.length >= 3) {
+                const y = parts[0];
+                const m = parts[1];
+                const d = parts[2];
+                if (y.length === 4 && m.length === 2 && d.length === 2) {
+                    pubDateStr = `${d}/${m}/${y}`;
+                }
+            }
+
+            // Exam Date: Extract YYYY-MM-DD from end of filename
+            const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})\.PDF$/i);
+            if (dateMatch) {
+                const [y, m, d] = dateMatch[1].split('-');
+                examDateStr = `${d}/${m}/${y}`;
+            }
+        } catch (e) { console.error('BME: Date parse error', e); }
+
+
+        const wrapper = document.createElement('div');
+        wrapper.id = 'bme-pdf-modal';
+        wrapper.style.cssText = PDF_STYLES.modalOverlay;
+
+        // Header with Modern Design
+        // Left: Info (Copie, Module, Type)
+        // Right: Dates + Actions
+        wrapper.innerHTML = `
+            <div style="${PDF_STYLES.header}">
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 4px;">
+                    <div style="font-size: 1.1rem; font-weight: 700; color: #333; display: flex; align-items: center; gap: 8px;">
+                        <span>Copie</span>
+                        <div style="width: 4px; height: 4px; background: #bbb; border-radius: 50%;"></div>
+                        <span style="color: #0163DD;">${moduleName || 'Module'}</span>
+                    </div>
+                    <div style="font-size: 0.9rem; color: #666; font-weight: 500;">
+                        ${examType || 'Examen'}
+                    </div>
+                </div>
+
+                <div style="display: flex; align-items: center; gap: 24px;">
+                   <div style="display: flex; flex-direction: column; gap: 2px; text-align: right; font-size: 0.8rem; color: #555; padding-right: 16px; border-right: 1px solid #eee;">
+                        <div><span style="color:#888; margin-right:4px;">Examen du:</span> <strong>${examDateStr}</strong></div>
+                        <div><span style="color:#888; margin-right:4px;">Publié le:</span> <strong>${pubDateStr}</strong></div>
+                   </div>
+
+                    <div style="display: flex; align-items: center; gap: 12px;">
+                        <button id="bme-btn-reorder" title="Réorganiser les pages (Livret A3)" style="${PDF_STYLES.btn}">
+                            ${BME_ICONS.sort}
+                        </button>
+                        <div style="width: 1px; height: 24px; background: #eee; margin: 0 4px;"></div>
+                        <span id="bme-scale-val" style="font-variant-numeric: tabular-nums; font-weight: 500; color: #555; width: 45px; text-align: center;">100%</span>
+                        <button id="bme-btn-out" title="Dézoomer" style="${PDF_STYLES.btn}"><svg viewBox="0 0 24 24" width="18" height="18" fill="#555"><path d="M19 13H5v-2h14v2z"/></svg></button>
+                        <button id="bme-btn-in" title="Zoomer" style="${PDF_STYLES.btn}"><svg viewBox="0 0 24 24" width="18" height="18" fill="#555"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg></button>
+                    </div>
+                    <a id="bme-dl-link" href="#" target="_blank" style="text-decoration: none;">
+                        <button style="${PDF_STYLES.dlBtn}">
+                            <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"></path></svg>
+                            Télécharger
+                        </button>
+                    </a>
+                    <button id="bme-close" style="border: none; background: transparent; cursor: pointer; color: #666; display: flex; padding: 5px;">
+                        <svg viewBox="0 0 24 24" width="28" height="28" fill="currentColor"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"></path></svg>
+                    </button>
+                </div>
+            </div>
+            <div id="bme-pdf-container" style="${PDF_STYLES.container}">
+                <div id="bme-loader" style="${PDF_STYLES.loader}">
+                    <div style="width: 40px; height: 40px; border: 4px solid #ddd; border-top-color: #0163DD; border-radius: 50%; animation: bme-spin 1s linear infinite;"></div>
+                    <div style="color: #666; font-weight: 500;">Chargement de la copie...</div>
+                </div>
+                <style>@keyframes bme-spin { to { transform: rotate(360deg); } }</style>
+            </div>
+        `;
+
+        document.body.style.overflow = 'hidden';
+        document.body.appendChild(wrapper);
+        requestAnimationFrame(() => wrapper.style.opacity = '1');
+
+        // Logic Context
+        // Logic Context
+        const ctx = { pdf: null, scale: 1.0, rendering: false, reorder: false, renderGen: 0 };
+        const container = wrapper.querySelector('#bme-pdf-container');
+        const updateScaleUI = () => wrapper.querySelector('#bme-scale-val').textContent = Math.round(ctx.scale * 100) + '%';
+        const reorderBtn = wrapper.querySelector('#bme-btn-reorder');
+        const btnIn = wrapper.querySelector('#bme-btn-in');
+        const btnOut = wrapper.querySelector('#bme-btn-out');
+
+        // Helper: Calculate page sequence based on current mode
+        const getPagesOrder = (numPages) => {
+            const pages = Array.from({ length: numPages }, (_, i) => i + 1);
+            if (!ctx.reorder) return pages;
+
+            // Booklet Reordering Algorithm (1, 2, N-1, N, 3, 4, N-3, N-2...) based on user input
+            const pairs = [];
+            for (let i = 0; i < numPages; i += 2) {
+                // Safely grab pairs (handle odd last page just in case)
+                if (i + 1 < numPages) pairs.push([pages[i], pages[i + 1]]);
+                else pairs.push([pages[i]]);
+            }
+
+            const evens = pairs.filter((_, i) => i % 2 === 0);
+            const odds = pairs.filter((_, i) => i % 2 !== 0);
+
+            // Logic: Even pairs come first (1-2, 3-4...), Odd pairs come last in reverse order (11-12, 9-10...)
+            // Concat arrays of arrays then flatten
+            const finalPairs = [...evens, ...odds.reverse()];
+            return finalPairs.flat();
+        };
+
+        const render = async () => {
+            if (!ctx.pdf) return;
+
+            // Start new generation
+            ctx.renderGen++;
+            const myGen = ctx.renderGen;
+
+            ctx.rendering = true;
+            container.innerHTML = ''; // Clear for redraw
+
+            const ratio = window.devicePixelRatio || 1;
+            const pageSequence = getPagesOrder(ctx.pdf.numPages);
+
+            try {
+                for (const pageNum of pageSequence) {
+                    // Check for cancellation
+                    if (ctx.renderGen !== myGen) return;
+
+                    try {
+                        const page = await ctx.pdf.getPage(pageNum);
+
+                        // Check again after async wait
+                        if (ctx.renderGen !== myGen) return;
+
+                        const viewport = page.getViewport({ scale: ctx.scale });
+
+                        const div = document.createElement('div');
+                        div.style.cssText = 'box-shadow: 0 4px 15px rgba(0,0,0,0.1); background: white; transition: all 0.2s; position: relative;';
+
+                        const canvas = document.createElement('canvas');
+                        canvas.width = Math.floor(viewport.width * ratio);
+                        canvas.height = Math.floor(viewport.height * ratio);
+                        canvas.style.cssText = `display:block; width: ${viewport.width}px; height: ${viewport.height}px;`;
+
+                        div.appendChild(canvas);
+                        container.appendChild(div);
+
+                        await page.render({
+                            canvasContext: canvas.getContext('2d'),
+                            viewport,
+                            transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : null
+                        }).promise;
+                    } catch (e) {
+                        // Ignore errors if cancelled
+                        if (ctx.renderGen !== myGen) return;
+                        console.error('BME: Page render error', pageNum, e);
+                    }
+                }
+            } finally {
+                // Only reset rendering flag if we are theoretically still the active generation
+                // (Though strictly multiple running overlaps might exist, cleaner to just let the last one finish)
+                if (ctx.renderGen === myGen) {
+                    ctx.rendering = false;
+                    updateScaleUI();
+
+                    // Update button state visual
+                    reorderBtn.style.color = ctx.reorder ? '#0163DD' : '#555';
+                    reorderBtn.style.background = ctx.reorder ? '#eef6fc' : 'white';
+                }
+            }
+        };
+
+        // Events
+        btnIn.onclick = () => { if (ctx.scale < 3) { ctx.scale += 0.25; render(); } };
+        btnOut.onclick = () => { if (ctx.scale > 0.5) { ctx.scale -= 0.25; render(); } };
+
+        reorderBtn.onclick = () => {
+            // Immediate feedback
+            ctx.reorder = !ctx.reorder;
+
+            // Visual feedback instant (optimistic UI)
+            reorderBtn.style.color = ctx.reorder ? '#0163DD' : '#555';
+            reorderBtn.style.background = ctx.reorder ? '#eef6fc' : 'white';
+
+            render();
+        };
+
+        const closeModal = () => {
+            wrapper.style.opacity = '0';
+            document.body.style.overflow = '';
+            setTimeout(() => wrapper.remove(), 300);
+        };
+        wrapper.querySelector('#bme-close').onclick = closeModal;
+        wrapper.addEventListener('click', e => { if (e.target === wrapper || e.target === container) closeModal(); });
+
+        // Load PDF
+        (async () => {
+            try {
+                const lib = await loadPdfJsLibrary();
+                const res = await fetch(`https://www.myefrei.fr/api/rest/student/exam/file?pathname=${encodeURIComponent(filePath)}`);
+                if (!res.ok) throw new Error('Fetch failed');
+
+                // Filename logic
+                let fname = `Copie_${(moduleName || 'Exam').replace(/[^a-z0-9]/gi, '_')}.pdf`;
+                const disp = res.headers.get('Content-Disposition');
+                const match = disp && disp.match(/filename="?([^"]+)"?/);
+                if (match?.[1]) fname = match[1];
+                else if (filePath) fname = filePath.replace(/\\/g, '/').split('/').pop() || fname;
+
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+
+                const link = wrapper.querySelector('#bme-dl-link');
+                link.firstElementChild.onclick = () => { link.href = url; link.download = fname; };
+
+                ctx.pdf = await lib.getDocument({ data: await blob.arrayBuffer() }).promise;
+                container.innerHTML = '';
+                await render();
+            } catch (err) {
+                console.error(err);
+                container.innerHTML = `<div style="text-align:center; padding:40px; color:#d32f2f;"><h3>Erreur</h3><p>${err.message}</p></div>`;
+            }
+        })();
+    }
+
+    function renderGradesFromData(data, container) {
+        if (!data || !data.grades || !data.grades.ues) return;
+
+        container.innerHTML = '';
+        const grid = document.createElement('div');
+        grid.className = 'bme-grade-grid';
+
+        // Helper to format float or handle null
+        // Rules: Max 2 decimals. Remove trailing zeros/dot. 16.00 -> 16, 16.70 -> 16.7, 19.067 -> 19.07
+        const fmt = (v) => {
+            if (v === null || v === undefined) return '-';
+
+            let val = v;
+            if (typeof val === 'string') {
+                val = val.replace(',', '.');
+            }
+
+            const num = parseFloat(val);
+            if (isNaN(num)) return v;
+            const rounded = Math.round(num * 100) / 100;
+            return rounded.toString().replace('.', ',');
+        };
+
+        const fmtECTS = (v) => {
+            if (v === null || v === undefined) return null;
+            const num = parseFloat(v);
+            return isNaN(num) ? v : num.toString();
+        };
+
+        const fmtCoef = (v) => {
+            if (v === null || v === undefined) return '';
+            const num = parseFloat(v);
+            if (isNaN(num)) return v;
+            // Reduce decimals as much as possible, consistent with "0.2000" -> "0.2"
+            return num.toString().replace('.', ',');
+        };
+
+        // === Debugging Data Structure ===
+        console.log("BME: Received Data Object:", data);
+        console.log("BME: Data Keys:", Object.keys(data));
+        if (data.grades) console.log("BME: Grades Keys:", Object.keys(data.grades));
+        if (data.rattrapages) console.log("BME: Rattrapages Type:", typeof data.rattrapages, data.rattrapages);
+
+        // Concatenate standard UEs and "unaffectedModules" if present
+        const allUEs = [...(data.grades.ues || [])];
+        if (data.grades.unaffectedModules && data.grades.unaffectedModules.modules && data.grades.unaffectedModules.modules.length > 0) {
+            allUEs.push({
+                ...data.grades.unaffectedModules,
+                isUnaffected: true // Flag to identify for styling
+            });
+        }
+
+        // === Rattrapage Logic Refactored: Nested in Modules ===
+        // No top-level injection needed as per new data structure finding.
+
+
+        allUEs.forEach(ue => {
+            // UE Header
+            const ueHeader = document.createElement('div');
+            ueHeader.className = 'bme-ue-header';
+
+            // Unaffected Style Override
+            if (ue.isUnaffected) {
+                ueHeader.style.borderLeftColor = '#9e9e9e'; // Grey accent
+                ueHeader.style.background = '#fafafa'; // Slightly different background
+            }
+
+            // ECTS Logic
+            const earnedStr = fmtCoef(ue.ectsEarned);
+            const attemptedStr = fmtCoef(ue.ectsAttempted);
+
+            // Logic: if attempted exists, show "earned/attempted". If earned is empty/null, show "-".
+            let ectsLabel = '';
+            if (attemptedStr !== '') {
+                const num = (earnedStr !== '') ? earnedStr : '-';
+                ectsLabel = `${num}/${attemptedStr} ECTS`;
+            }
+
+            let statsHtml = '';
+            // Only show stats if NOT unaffected
+            if (!ue.isUnaffected) {
+                if (ectsLabel) {
+                    statsHtml += `<span class="bme-ue-ects">${ectsLabel}</span>`;
+                }
+                if (ue.grade !== null && ue.grade !== undefined) {
+                    statsHtml += `<span class="bme-ue-average">${fmt(ue.grade)}</span>`;
+                }
+            }
+
+            // UE Name/Code Parsing
+            let displayCode = ue.code;
+            let displayName = ue.name;
+
+            // Only apply splitting logic if the code is the long internal format (starts with DIP)
+            if (ue.code && ue.code.startsWith('DIP')) {
+                if (displayName && displayName.includes(' - ')) {
+                    const parts = displayName.split(' - ');
+                    if (parts.length >= 2) {
+                        displayCode = parts[0];
+                        // Join the rest back in case there are multiple dashes
+                        displayName = parts.slice(1).join(' - ');
+                    }
+                }
+            }
+
+            // Hide code for unaffected
+            if (ue.isUnaffected) displayCode = '';
+
+            ueHeader.innerHTML = `
+                 <div class="bme-ue-info">
+                     ${displayCode ? `<span class="bme-ue-code">${displayCode}</span>` : ''}
+                     <span class="bme-ue-name">${displayName}</span>
+                 </div>
+                 <div class="bme-ue-stats">${statsHtml}</div>
+              `;
+            grid.appendChild(ueHeader);
+
+            // Modules
+            if (ue.modules) {
+                ue.modules.forEach(mod => {
+                    const card = document.createElement('div');
+                    card.className = 'bme-grade-card';
+
+                    const header = document.createElement('div');
+                    header.className = 'bme-grade-header';
+                    header.innerHTML = `
+                         <div class="bme-grade-title">${mod.name}</div>
+                         <div class="bme-grade-code">${mod.code}</div>
+                      `;
+
+                    // Teachers Display inside Header
+                    if (mod.teachers && mod.teachers.length > 0) {
+                        const tDiv = document.createElement('div');
+                        tDiv.className = 'bme-grade-teachers';
+                        tDiv.style.cssText = 'margin-top: 4px; font-size: 0.8rem; color: #666; display: flex; align-items: center; gap: 6px;';
+
+                        if (mod.teachers.length > 2) {
+                            tDiv.style.cursor = 'pointer';
+                            tDiv.style.transition = 'opacity 0.2s';
+                            tDiv.onmouseenter = () => tDiv.style.opacity = '0.7';
+                            tDiv.onmouseleave = () => tDiv.style.opacity = '1';
+                            tDiv.onclick = (e) => {
+                                e.stopPropagation();
+                                openTeacherPopover(e, mod.teachers, mod.name);
+                            };
+                        }
+
+                        const iconContainer = document.createElement('div');
+                        iconContainer.style.cssText = 'display: flex; opacity: 0.9;';
+                        iconContainer.innerHTML = BME_ICONS.teacher || '';
+                        const svg = iconContainer.querySelector('svg');
+                        if (svg) {
+                            svg.setAttribute('width', '14');
+                            svg.setAttribute('height', '14');
+                            svg.style.color = 'currentColor';
+                        }
+
+                        let label = mod.teachers[0];
+                        let extraLabel = '';
+
+                        if (mod.teachers.length === 2) {
+                            label += `, ${mod.teachers[1]}`;
+                        } else if (mod.teachers.length > 2) {
+                            label += `, ${mod.teachers[1]}`;
+                            extraLabel = ` (+${mod.teachers.length - 2})`;
+                        }
+
+                        const textSpan = document.createElement('span');
+                        textSpan.textContent = label;
+                        textSpan.style.cssText = 'white-space: nowrap; overflow: hidden; text-overflow: ellipsis;';
+
+                        tDiv.appendChild(iconContainer);
+                        tDiv.appendChild(textSpan);
+
+                        if (extraLabel) {
+                            const extraSpan = document.createElement('span');
+                            extraSpan.textContent = extraLabel;
+                            extraSpan.style.cssText = 'font-weight: 600; opacity: 1; margin-left:2px;';
+                            tDiv.appendChild(extraSpan);
+                        }
+
+
+
+                        header.appendChild(tDiv);
+                    }
+                    card.appendChild(header);
+
+
+                    // Average
+                    const avgContainer = document.createElement('div');
+                    avgContainer.className = 'bme-grade-average-container';
+
+                    const avgDiv = document.createElement('div');
+                    avgDiv.className = 'bme-grade-average';
+                    const avgVal = mod.grade !== null ? parseFloat(mod.grade) : null;
+                    avgDiv.textContent = fmt(mod.grade);
+
+                    if (avgVal !== null) {
+                        if (avgVal < 10) avgDiv.style.color = '#d32f2f';
+                        else if (avgVal < 12) avgDiv.style.color = '#f57c00';
+                        else avgDiv.style.color = '#388e3c';
+                    } else {
+                        avgDiv.style.color = '#999';
+                    }
+                    avgContainer.appendChild(avgDiv);
+
+                    if (mod.coef) {
+                        const coefDiv = document.createElement('div');
+                        coefDiv.className = 'bme-grade-coef';
+                        coefDiv.textContent = `Coef: ${fmtCoef(mod.coef)}`;
+                        avgContainer.appendChild(coefDiv);
+                    }
+                    card.appendChild(avgContainer);
+
+                    // Details
+                    const details = document.createElement('div');
+                    details.className = 'bme-grade-details';
+
+                    // Recursive function to render grades
+                    const renderGradeList = (list, depth = 0) => {
+                        if (!list || list.length === 0) return;
+
+                        list.forEach(g => {
+                            const row = document.createElement('div');
+                            row.className = 'bme-grade-detail-row';
+
+                            // Basic Styles for row
+                            // We might want to add a class for subgrades if depth > 0
+
+                            const detailType = g.courseActivity || g.type || 'N/A';
+
+                            let examAction = '';
+                            if (g.examFile) {
+                                examAction = `
+                                <div class="bme-exam-btn" style="cursor:pointer; display:flex; align-items:center; margin-left:12px; transition: transform 0.2s;" title="Voir la copie">
+                                    ${BME_ICONS.exam}
+                                </div>
+                             `;
+                            }
+
+                            // Color logic
+                            let gradeStyle = '';
+
+                            // Sub-grade handling
+                            let visualContent = '';
+                            if (depth > 0) {
+                                const subArrow = `<svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" style="color:#bdbdbd; margin-right:6px; flex-shrink:0;"><path d="M19 15l-6 6-1.42-1.42L15.17 16H4V4h2v10h9.17l-3.59-3.58L13 9l6 6z"></path></svg>`;
+                                visualContent = `
+                                <div style="display:flex; align-items:center;">
+                                    ${subArrow}
+                                    <span class="bme-detail-type" style="font-size:0.95em;">${detailType}</span>
+                                </div>
+                             `;
+                            } else {
+                                visualContent = `<span class="bme-detail-type"><b>${detailType}</b></span>`;
+                            }
+
+                            row.innerHTML = `
+                             <div class="bme-detail-left">
+                                 ${visualContent}
+                                 ${g.coef ? `<span class="bme-detail-coef">${fmtCoef(g.coef)}</span>` : ''}
+                                 ${examAction}
+                             </div>
+                             <span>${fmt(g.grade)}</span>
+                          `;
+
+                            if (g.examFile) {
+                                const btn = row.querySelector('.bme-exam-btn');
+                                btn.onclick = (e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    openExamPdfJsModal(null, g.examFile, mod.name, detailType);
+                                };
+                                btn.addEventListener('mouseenter', () => btn.style.transform = 'scale(1.1)');
+                                btn.addEventListener('mouseleave', () => btn.style.transform = 'scale(1)');
+                            }
+
+                            details.appendChild(row);
+
+                            // Check for children
+                            if (g.grades && g.grades.length > 0) {
+                                renderGradeList(g.grades, depth + 1);
+                            }
+                        });
+                    };
+
+                    if (mod.grades) {
+                        renderGradeList(mod.grades, 0);
+                    }
+                    card.appendChild(details);
+
+                    // === Rattrapage Frame ===
+                    // Use nested rattrapages from the module object directly
+                    const rattrapagesData = mod.rattrapages;
+
+                    if (rattrapagesData && rattrapagesData.length > 0) {
+                        const frame = document.createElement('div');
+                        frame.style.cssText = `
+                            margin-top: 15px;
+                            border: 1px solid #e0e0e0;
+                            border-left: 4px solid #f57c00;
+                            border-radius: 8px;
+                            background: #fff8f3;
+                            padding: 10px 15px;
+                        `;
+
+                        rattrapagesData.forEach(rt => {
+                            const rtRow = document.createElement('div');
+                            rtRow.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;';
+                            if (rattrapagesData.indexOf(rt) === rattrapagesData.length - 1) rtRow.style.marginBottom = '0';
+
+                            // Left: Label + Exam Icon
+                            const left = document.createElement('div');
+                            left.style.cssText = 'display: flex; align-items: center; gap: 8px;';
+
+                            const label = document.createElement('span');
+                            label.innerHTML = `<b>Rattrapage</b>`;
+                            label.style.fontSize = '0.9em';
+                            left.appendChild(label);
+
+                            if (rt.examFile) {
+                                const btn = document.createElement('div');
+                                btn.style.cssText = 'cursor:pointer; display:flex; align-items:center; transition: transform 0.2s;';
+                                btn.title = "Voir la copie";
+                                btn.innerHTML = BME_ICONS.exam;
+                                btn.onclick = (e) => {
+                                    e.preventDefault(); e.stopPropagation();
+                                    openExamPdfJsModal(null, rt.examFile, rt.name, "Rattrapage");
+                                };
+                                btn.addEventListener('mouseenter', () => btn.style.transform = 'scale(1.1)');
+                                btn.addEventListener('mouseleave', () => btn.style.transform = 'scale(1)');
+                                left.appendChild(btn);
+                            }
+                            rtRow.appendChild(left);
+
+                            // Right: Grade
+                            const right = document.createElement('div');
+                            let color = '#333';
+                            if (rt.grade !== null) {
+                                const v = parseFloat(rt.grade);
+                                if (!isNaN(v)) {
+                                    if (v < 10) color = '#d32f2f'; // Red
+                                    else color = '#388e3c'; // Green
+                                }
+                            }
+                            right.textContent = fmt(rt.grade);
+                            right.style.color = color;
+                            right.style.fontWeight = 'bold';
+                            rtRow.appendChild(right);
+
+                            frame.appendChild(rtRow);
+                        });
+
+                        card.appendChild(frame);
+                    }
+                    grid.appendChild(card);
+                });
+            }
+        });
+
+        container.appendChild(grid);
+    }
+
+    whenItemLoaded('table.MuiTable-root', (table) => {
+        // Only on grades page (check title or URL)
+        if (!location.href.includes('/grades')) {
+            const title = document.querySelector('h1');
+            if (!title || !title.textContent.includes('Notes')) return;
+        }
+
+        // Avoid double processing
+        if (table.getAttribute('data-bme-replaced') === '1') return;
+
+        // Hide original table
+        table.style.display = 'none';
+        table.setAttribute('data-bme-replaced', '1');
+
+        // Prepare our container
+        // Use a class-based approach to handle potential re-renders where multiple containers might exist temporarily
+        let container = document.createElement('div');
+        container.className = 'bme-grades-custom-container';
+        table.parentNode.appendChild(container);
+
+        const updateView = (data) => {
+            if (data) {
+                renderGradesFromData(data, container);
+            }
+        };
+
+        if (latestGradesData) {
+            updateView(latestGradesData);
+        } else {
+            // Try to fetch default ONLY if we haven't successfully intercepted anything yet
+            if (!w.bmeHasFetchedDefault) {
+                w.bmeHasFetchedDefault = true;
+                fetchDefaultGrades().then(data => {
+                    // Only apply if we still don't have fresh data from interceptor
+                    if (!latestGradesData && data) {
+                        latestGradesData = data;
+                        updateView(data);
+                    }
+                });
+            }
+        }
+    });
+
+    // Global listener for updates - Updates ALL existing containers (handles duplicates/zombies safely)
+    // This ensures that when a semester changes, ALL current grade views are updated.
+    if (!w.bmeGradesListenerAdded) {
+        w.addEventListener('bme-grades-update', (e) => {
+            console.log('BME: Updating all grade containers with new data');
+            const containers = document.querySelectorAll('.bme-grades-custom-container');
+            containers.forEach(c => renderGradesFromData(e.detail, c));
+        });
+        w.bmeGradesListenerAdded = true;
+    }
+
 })();
+
+// --- Teacher Popover Logic ---
+function openTeacherPopover(event, teachers, moduleName) {
+    // Remove existing
+    document.getElementById('bme-teacher-popover')?.remove();
+
+    const popover = document.createElement('div');
+    popover.id = 'bme-teacher-popover';
+
+    // Glassmorphism Styles
+    popover.style.cssText = `
+        position: absolute;
+        z-index: 10000;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        -webkit-backdrop-filter: blur(10px);
+        border: 1px solid rgba(0, 0, 0, 0.1);
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+        padding: 16px;
+        min-width: 200px;
+        max-width: 300px;
+        font-family: 'Roboto', sans-serif;
+        animation: bme-fade-in 0.2s ease-out;
+    `;
+
+    // Header
+    const header = document.createElement('div');
+    header.style.cssText = 'font-weight: bold; color: #333; margin-bottom: 12px; font-size: 0.95rem; border-bottom: 1px solid #eee; padding-bottom: 8px;';
+    header.textContent = 'Intervenants';
+    popover.appendChild(header);
+
+    // List
+    const list = document.createElement('div');
+    list.style.cssText = 'display: flex; flex-direction: column; gap: 6px; max-height: 300px; overflow-y: auto;';
+
+    teachers.forEach(t => {
+        const item = document.createElement('div');
+        item.style.cssText = 'display: flex; align-items: center; gap: 8px; font-size: 0.9rem; color: #555;';
+        item.innerHTML = `
+            <div style="width: 6px; height: 6px; background: #0163DD; border-radius: 50%;"></div>
+            <span>${t}</span>
+        `;
+        list.appendChild(item);
+    });
+    popover.appendChild(list);
+
+    // Calculate Position (Relative to document for absolute positioning)
+    const rect = event.currentTarget.getBoundingClientRect();
+    const scrollX = window.scrollX || window.pageXOffset;
+    const scrollY = window.scrollY || window.pageYOffset;
+
+    let top = rect.bottom + scrollY + 10;
+    let left = rect.left + scrollX;
+
+    // Adjust if off-screen
+    if (rect.left + 250 > window.innerWidth) left = (window.innerWidth - 270) + scrollX;
+
+    // Check vertical overflow (viewport relative)
+    if (rect.bottom + 200 > window.innerHeight) {
+        top = (rect.top + scrollY) - 200;
+    }
+
+    popover.style.top = top + 'px';
+    popover.style.left = left + 'px';
+
+    // Close logic
+    const close = (e) => {
+        if (!popover.contains(e.target) && e.target !== event.currentTarget) {
+            popover.remove();
+            document.removeEventListener('click', close);
+        }
+    };
+
+    // Slight delay to avoid immediate close from bubble event
+    setTimeout(() => document.addEventListener('click', close), 50);
+
+    document.body.appendChild(popover);
+}
+
+// Add keyframes for fade-in
+if (!document.getElementById('bme-popover-anim')) {
+    const s = document.createElement('style');
+    s.id = 'bme-popover-anim';
+    s.textContent = `@keyframes bme-fade-in { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }`;
+    document.head.appendChild(s);
+}
