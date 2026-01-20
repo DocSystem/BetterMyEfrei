@@ -22,4 +22,12 @@ UI/UX tweaks for MyEfrei
   - Better colors
   - Show course type on planning page, without clicking on the course
   - Better course modal
+- Better Grades
+  - Modern card-based layout for modules
+  - Automatic average and ECTS tracking
+  - Integrated "Rattrapage" (retake) grades display
+  - Advanced PDF Viewer for exam copies
+    - Zoom controls
+    - Booklet mode reordering (A3 format)
+    - Dark/Light mode compatible
 - Show main contact on home page
