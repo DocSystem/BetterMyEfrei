@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name         Better MyEfrei
 // @namespace    https://www.myefrei.fr/
-// @version      0.4.7
-// @description  some improvements to MyEfrei UI!
+// @version      0.5.0
+// @description  Some improvements to MyEfrei UI!
 // @author       DocSystem & Doryan D. & Mathu_lmn & Mat15
 // @match        https://www.myefrei.fr/portal/student/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=www.myefrei.fr
