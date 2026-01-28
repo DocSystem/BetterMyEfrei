@@ -1213,7 +1213,7 @@
             }
 
             // Exam Date: Extract YYYY-MM-DD from end of filename
-            const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})\.PDF$/i);
+            const dateMatch = filename.match(/(\d{4}-\d{2}-\d{2})/);
             if (dateMatch) {
                 const [y, m, d] = dateMatch[1].split('-');
                 examDateStr = `${d}/${m}/${y}`;
