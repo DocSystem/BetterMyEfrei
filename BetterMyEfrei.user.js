@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Better MyEfrei
 // @namespace    https://www.myefrei.fr/
-// @version      0.5.1
+// @version      0.5.2
 // @description  Some improvements to MyEfrei UI!
 // @author       DocSystem & Doryan D. & Mathu_lmn & Mat15
 // @match        https://www.myefrei.fr/portal/student/*
@@ -931,11 +931,29 @@
         const t = Array.from(modal.querySelectorAll('.MuiTypography-body2'))
             .find(p => /groupe/i.test(p.textContent || ''));
         if (!t) return { title: null, nodes: [], values: [] };
+
         const nodes = [];
         const values = [];
         let n = t.nextElementSibling;
         while (n && !n.classList.contains('MuiTypography-body2')) {
-            if (n.matches('.MuiBox-root') && n.textContent.trim()) values.push(n.textContent.trim());
+            if (n.matches('.MuiBox-root')) {
+                // Try to find name in <p>, fallback to full text but exclude link text if possible
+                const pTag = n.querySelector('p.MuiTypography-body1') || n.querySelector('p');
+                let name = pTag ? pTag.textContent.trim() : n.textContent.trim();
+
+                // Look for Teams link
+                const link = n.querySelector('a[href*="teams"]');
+                const url = link ? link.href : null;
+
+                // Cleanup name if we have no pTag (and used full textContent) and we found a link
+                if (!pTag && link && name.includes(link.textContent.trim())) {
+                    name = name.replace(link.textContent.trim(), '').trim();
+                }
+
+                if (name) {
+                    values.push({ name, url });
+                }
+            }
             nodes.push(n);
             n = n.nextElementSibling;
         }
@@ -1106,9 +1124,27 @@
         }
         grid.appendChild(buildField({ label: 'Salle', icon: BME_ICONS.room, contentHTML: roomHTML }));
 
-        const groupsHTML = (groupsInfo.values.length)
-            ? groupsInfo.values.map(g => `<span class="MuiTypography-root MuiTypography-body1"><b>${g}</b></span>`).join('')
-            : '';
+        let groupsHTML = '';
+        if (groupsInfo.values.length > 0) {
+            groupsHTML = groupsInfo.values.map(grp => {
+                const gName = grp.name;
+                const teamsUrl = grp.url;
+
+                let html = `<span class="MuiTypography-root MuiTypography-body1"><b>${gName}</b></span>`;
+                if (teamsUrl) {
+                    // Teams Icon wrapped in a clickable anchor
+                    const teamsIcon = `
+                    <a href="${teamsUrl}" target="_blank" title="Voir l'équipe Teams" style="display:inline-flex; align-items:center; color:#5b5fc7; margin-left:8px; text-decoration:none; transition: transform 0.2s;" onmouseenter="this.style.transform='scale(1.1)'" onmouseleave="this.style.transform='scale(1)'">
+                        <svg width="20" height="20" viewBox="0 0 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M16.5506 6.7392H15.9865C16.1974 6.37931 16.3082 5.97015 16.3077 5.55364C16.3079 5.15238 16.2057 4.75762 16.0106 4.40633C15.8156 4.05505 15.5341 3.75873 15.1925 3.54513C14.8508 3.33153 14.4603 3.20763 14.0574 3.18503C13.6545 3.16243 13.2524 3.24188 12.8888 3.41593C12.5227 2.8218 11.9579 2.37487 11.2935 2.15363C10.629 1.93238 9.90744 1.95097 9.25541 2.20611C8.60337 2.46126 8.06258 2.93665 7.72798 3.54883C7.39338 4.16101 7.28638 4.87082 7.42575 5.55364H3.19231C2.87609 5.55364 2.57282 5.67855 2.34922 5.90089C2.12562 6.12322 2 6.42477 2 6.7392V13.8526C2 14.167 2.12562 14.4686 2.34922 14.6909C2.57282 14.9132 2.87609 15.0381 3.19231 15.0381H5.92493C6.2818 15.9143 6.89389 16.6645 7.68262 17.1923C8.47135 17.7201 9.40071 18.0014 10.3514 18.0002C11.3021 17.999 12.2308 17.7153 13.0182 17.1856C13.8055 16.6558 14.4157 15.9041 14.7704 15.027C15.5147 14.9644 16.2082 14.6263 16.7137 14.0794C17.2193 13.5326 17.4999 12.817 17.5 12.0742V7.68321C17.4996 7.43296 17.3995 7.19308 17.2215 7.01613C17.0435 6.83918 16.8023 6.7396 16.5506 6.7392ZM10.3462 3.18252C10.7161 3.1825 11.077 3.29657 11.3791 3.50903C11.6811 3.72149 11.9095 4.02186 12.0327 4.36877C12.1559 4.71568 12.1678 5.09203 12.0669 5.44597C11.966 5.79992 11.7571 6.11402 11.4692 6.34501C11.3872 6.11385 11.2352 5.91364 11.0341 5.77192C10.833 5.6302 10.5926 5.55395 10.3462 5.55364H8.66053C8.56517 5.28546 8.5359 4.99844 8.57519 4.71668C8.61447 4.43492 8.72115 4.16664 8.88627 3.93436C9.0514 3.70208 9.27016 3.51258 9.52418 3.38175C9.7782 3.25093 10.0601 3.18261 10.3462 3.18252ZM6.76923 12.667C6.61112 12.667 6.45949 12.6046 6.34769 12.4934C6.23589 12.3822 6.17308 12.2314 6.17308 12.0742V9.11033H5.57692C5.41881 9.11033 5.26718 9.04787 5.15538 8.93671C5.04358 8.82554 4.98077 8.67476 4.98077 8.51755C4.98077 8.36033 5.04358 8.20956 5.15538 8.09839C5.26718 7.98722 5.41881 7.92477 5.57692 7.92477H7.96154C8.11965 7.92477 8.27128 7.98722 8.38308 8.09839C8.49488 8.20956 8.55769 8.36033 8.55769 8.51755C8.55769 8.67476 8.49488 8.82554 8.38308 8.93671C8.27128 9.04787 8.11965 9.11033 7.96154 9.11033H7.36538V12.0742C7.36538 12.2314 7.30258 12.3822 7.19078 12.4934C7.07897 12.6046 6.92734 12.667 6.76923 12.667ZM13.9231 13.2598C13.9228 14.0425 13.6629 14.8033 13.1836 15.4242C12.7043 16.0451 12.0324 16.4915 11.272 16.6941C10.5117 16.8967 9.70533 16.8442 8.978 16.5448C8.25068 16.2454 7.64299 15.7158 7.24914 15.0381H10.3462C10.6624 15.0381 10.9656 14.9132 11.1892 14.6909C11.4128 14.4686 11.5385 14.167 11.5385 13.8526V7.92477H13.9231V13.2598ZM13.9231 6.7392H12.7308C12.9655 6.42858 13.1364 6.07498 13.2336 5.69863C13.3307 5.32228 13.3523 4.93057 13.2971 4.54592C13.454 4.44925 13.6313 4.39011 13.815 4.37316C13.9988 4.3562 14.184 4.38189 14.3561 4.4482C14.5281 4.51451 14.6824 4.61964 14.8067 4.7553C14.9309 4.89096 15.0218 5.05345 15.0722 5.22998C15.1226 5.40651 15.1311 5.59226 15.097 5.77261C15.0629 5.95295 14.9872 6.12297 14.8758 6.26927C14.7644 6.41557 14.6204 6.53417 14.2897 6.69726 14.1076 6.73953 13.9231 6.7392ZM16.3077 12.0742C16.3077 12.4468 16.19 12.8099 15.9712 13.1124C15.7525 13.4148 15.4437 13.6414 15.0886 13.7599C15.1065 13.5938 15.1155 13.4269 15.1154 13.2598V7.92477H16.3077V12.0742Z" />
+                        </svg>
+                    </a>
+                    `;
+                    html += teamsIcon;
+                }
+                return `<div style="display:flex; align-items:center;">${html}</div>`;
+            }).join('');
+        }
         grid.appendChild(buildField({ label: 'Groupe', icon: BME_ICONS.group, contentHTML: groupsHTML }));
 
         const teacherCell = buildField({ label: 'Intervenant(s)', icon: BME_ICONS.teacher, contentHTML: teacherHTML });
