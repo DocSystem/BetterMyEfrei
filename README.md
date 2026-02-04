@@ -37,7 +37,7 @@ TamperMonkey will automatically detect the userscript and prompt you to Install 
 - Dark/Light mode compatible
 - Show main contact on home page
 
-## Contributors
+## Contributors
 * [DocSystem](https://github.com/DocSystem)
 * [DorDNS](https://github.com/DorDNS)
 * [Mathu-lmn](https://github.com/Mathu-lmn)
