@@ -1760,6 +1760,175 @@
         document.head.appendChild(css);
     }
 
+    // === Better MyEfrei — Navigation améliorée ===
+    // Inverse le bouton "Aujourd'hui" et l'indicateur de semaine pour une meilleure UX
+    const NAV_CSS_ID = 'bme-nav-css';
+    if (!document.querySelector(`#${NAV_CSS_ID}`)) {
+        const navCss = document.createElement('style');
+        navCss.id = NAV_CSS_ID;
+        navCss.textContent = `
+    /* Groupe de navigation unifié (flèches + aujourd'hui) */
+    .bme-nav-group {
+        display: inline-flex;
+        align-items: stretch;
+    }
+
+    /* Boutons dans le groupe - garder le style MUI existant mais ajuster les bordures */
+    .bme-nav-group > button:first-child {
+        border-top-right-radius: 0 !important;
+        border-bottom-right-radius: 0 !important;
+        border-right: none !important;
+    }
+
+    .bme-nav-group > button:last-child {
+        border-top-left-radius: 0 !important;
+        border-bottom-left-radius: 0 !important;
+        border-left: none !important;
+    }
+
+    .bme-nav-group > button.bme-today-btn {
+        border-radius: 0 !important;
+        border-left: none !important;
+        border-right: none !important;
+        position: relative;
+        overflow: hidden;
+    }
+
+    /* Style hover pour les boutons flèches dans le groupe */
+    .bme-nav-group > button.MuiIconButton-root {
+        border: 1px solid #1565c0 !important;
+        border-radius: 0 !important;
+        padding: 4px 8px !important;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .bme-nav-group > button.MuiIconButton-root:first-child {
+        border-top-left-radius: 4px !important;
+        border-bottom-left-radius: 4px !important;
+        border-right: none !important;
+    }
+
+    .bme-nav-group > button.MuiIconButton-root:last-child {
+        border-top-right-radius: 4px !important;
+        border-bottom-right-radius: 4px !important;
+        border-left: none !important;
+    }
+
+    /* Cacher le ripple MUI par défaut dans le groupe de navigation */
+    .bme-nav-group > button .MuiTouchRipple-root {
+        display: none !important;
+    }
+
+    /* Animation ripple */
+    @keyframes bme-ripple-anim {
+        to {
+            transform: scale(4);
+            opacity: 0;
+        }
+    }
+
+    .bme-ripple {
+        position: absolute;
+        border-radius: 50%;
+        background-color: rgba(21, 101, 192, 0.3);
+        transform: scale(0);
+        animation: bme-ripple-anim 0.6s ease-out;
+        pointer-events: none;
+    }
+  `;
+        document.head.appendChild(navCss);
+    }
+
+    // Fonction pour créer l'effet ripple
+    function createRipple(event, button) {
+        const ripple = document.createElement('span');
+        const rect = button.getBoundingClientRect();
+        const size = Math.max(rect.width, rect.height);
+        const x = event.clientX - rect.left - size / 2;
+        const y = event.clientY - rect.top - size / 2;
+
+        ripple.className = 'bme-ripple';
+        ripple.style.width = ripple.style.height = size + 'px';
+        ripple.style.left = x + 'px';
+        ripple.style.top = y + 'px';
+
+        button.appendChild(ripple);
+
+        setTimeout(() => ripple.remove(), 600);
+    }
+
+    // Fonction pour réorganiser la navigation du calendrier
+    function reorganizeCalendarNavigation() {
+        // Trouver le conteneur de la toolbar du calendrier
+        const toolbar = document.querySelector('.rbc-calendar > div:first-child');
+        if (!toolbar || toolbar.dataset.bmeNavProcessed) return;
+
+        // Trouver les éléments
+        const todayButton = toolbar.querySelector('button.MuiButton-outlined');
+        const labelDate = toolbar.querySelector('.label-date');
+        if (!todayButton || !labelDate) return;
+
+        const leftArrow = labelDate.querySelector('button:first-of-type');
+        const rightArrow = labelDate.querySelector('button:last-of-type');
+        const weekLabel = labelDate.querySelector('p');
+        if (!leftArrow || !rightArrow || !weekLabel) return;
+
+        // Marquer comme traité
+        toolbar.dataset.bmeNavProcessed = '1';
+
+        // Créer le groupe de navigation
+        const navGroup = document.createElement('div');
+        navGroup.className = 'bme-nav-group';
+
+        // Cloner le bouton aujourd'hui pour le mettre au milieu
+        const todayBtnClone = todayButton.cloneNode(true);
+        todayBtnClone.classList.add('bme-today-btn');
+
+        // Supprimer le span MuiTouchRipple existant pour éviter les conflits
+        const existingRipple = todayBtnClone.querySelector('.MuiTouchRipple-root');
+        if (existingRipple) existingRipple.remove();
+
+        // Supprimer aussi les ripples MUI des flèches
+        const leftRipple = leftArrow.querySelector('.MuiTouchRipple-root');
+        if (leftRipple) leftRipple.remove();
+        const rightRipple = rightArrow.querySelector('.MuiTouchRipple-root');
+        if (rightRipple) rightRipple.remove();
+
+        // Transférer le clic vers le bouton original avec effet ripple
+        todayBtnClone.addEventListener('click', (e) => {
+            createRipple(e, todayBtnClone);
+            e.preventDefault();
+            e.stopPropagation();
+            todayButton.click();
+        });
+
+        // Ajouter l'effet ripple aux boutons flèches
+        leftArrow.addEventListener('click', (e) => createRipple(e, leftArrow));
+        rightArrow.addEventListener('click', (e) => createRipple(e, rightArrow));
+
+        // Déplacer les flèches et le bouton aujourd'hui dans le groupe
+        navGroup.appendChild(leftArrow);
+        navGroup.appendChild(todayBtnClone);
+        navGroup.appendChild(rightArrow);
+
+        // Cacher le bouton aujourd'hui original
+        todayButton.style.display = 'none';
+
+        // Remplacer le contenu de label-date par le groupe de navigation
+        labelDate.innerHTML = '';
+        labelDate.appendChild(navGroup);
+
+        // Déplacer l'indicateur de semaine à gauche (à la place du bouton aujourd'hui)
+        toolbar.insertBefore(weekLabel, todayButton);
+    }
+
+    // Observer pour détecter quand le calendrier est chargé et réappliquer si nécessaire
+    const navObserver = new MutationObserver(() => {
+        reorganizeCalendarNavigation();
+    });
+    navObserver.observe(document.body, { childList: true, subtree: true });
+
     const CALENDAR_EVENT_COLORS = {
         CM: {
             normal: '#E2FFEF',
