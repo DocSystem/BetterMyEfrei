@@ -88,42 +88,6 @@
         const css = document.createElement('style');
         css.id = BME_SETTINGS_CSS_ID;
         css.textContent = `
-    /* Bouton roue dentée flottant */
-    .bme-settings-btn {
-        position: fixed;
-        bottom: 24px;
-        right: 24px;
-        width: 48px;
-        height: 48px;
-        border-radius: 50%;
-        background: #163767;
-        border: none;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        box-shadow: 0 4px 12px rgba(22, 55, 103, 0.4);
-        transition: all 0.3s ease;
-        z-index: 9999;
-    }
-    .bme-settings-btn:hover {
-        background: #0e2444;
-        transform: scale(1.1);
-        box-shadow: 0 6px 16px rgba(22, 55, 103, 0.5);
-    }
-    .bme-settings-btn:active {
-        transform: scale(0.95);
-    }
-    .bme-settings-btn svg {
-        width: 24px;
-        height: 24px;
-        fill: white;
-        transition: transform 0.5s ease;
-    }
-    .bme-settings-btn:hover svg {
-        transform: rotate(90deg);
-    }
-
     /* Overlay de la popup */
     .bme-settings-overlay {
         position: fixed;
@@ -380,23 +344,12 @@
         document.head.appendChild(css);
     }
 
-    // Créer le bouton et le menu de settings
+    // Créer le menu de settings (popup uniquement, accessible via le menu profil)
     function createSettingsMenu() {
         // Vérifier si déjà créé
-        if (document.querySelector('.bme-settings-btn')) return;
+        if (document.querySelector('.bme-settings-overlay')) return;
 
-        // Bouton roue dentée
-        const settingsBtn = document.createElement('button');
-        settingsBtn.className = 'bme-settings-btn';
-        settingsBtn.title = 'Better MyEfrei - Paramètres';
-        settingsBtn.innerHTML = `
-            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
-            </svg>
-        `;
-        document.body.appendChild(settingsBtn);
-
-        // Overlay et popup
+        // Overlay et popup (sans bouton flottant - accès via menu profil)
         const overlay = document.createElement('div');
         overlay.className = 'bme-settings-overlay';
         overlay.innerHTML = `
@@ -559,7 +512,9 @@
             overlay.classList.remove('open');
         }
 
-        settingsBtn.addEventListener('click', openSettings);
+        // Exposer openSettings globalement pour le bouton du menu profil
+        w.bmeOpenSettings = openSettings;
+
         overlay.querySelector('.bme-settings-close').addEventListener('click', closeSettings);
         overlay.addEventListener('click', (e) => {
             if (e.target === overlay) closeSettings();
@@ -1312,7 +1267,10 @@
         `;
         liElem.style.color = 'rgb(112, 112, 112)';
         liElem.addEventListener('click', () => {
-            console.log('Better myEfrei button clicked');
+            // Ouvrir la popup de settings Better MyEfrei
+            if (typeof w.bmeOpenSettings === 'function') {
+                w.bmeOpenSettings();
+            }
         });
         dropdown.appendChild(liElem);
     });
