@@ -24,6 +24,8 @@ UI/UX tweaks for MyEfrei
   - Better course modal
   - **Cropped schedule view** (by @RemiVibert): Display only hours between configurable start and end times without scrolling
   - **Settings menu** (by @RemiVibert): Customization popup accessible via the profile menu
+  - **Event color customization** (by @RemiVibert): Personalize colors for each course type (CM, TD, TP, etc.)
+  - **Profile picture toggle** (by @RemiVibert): Option to hide your profile picture
 - Better Grades
   - Modern card-based layout for modules
   - Automatic average and ECTS tracking
@@ -42,14 +44,32 @@ This fork adds the following features:
 The schedule is no longer scrollable and displays fully visible, showing only the configured time range. This makes it easier to see the entire day at a glance without scrolling.
 
 ### Settings Menu (v0.7.0)
-A customization menu accessible via the **"Better myEfrei" button** in the profile dropdown menu (click on your profile picture in the top-right corner). Features:
+A customization menu accessible via the **"Better myEfrei" button** in the profile dropdown menu (click on your profile picture in the top-right corner).
 
-- **Time Range Slider**: A dual-handle slider to customize the visible time range on the planning
-  - Default: 7:30 AM to 8:00 PM
-  - Range: 00:00 to 24:00
-  - Snaps to 15-minute intervals
-  - **Live update**: Changes apply immediately without page refresh
-  - Settings persist in localStorage across sessions
-- Uses the site's native color theme for seamless integration
+#### Time Range
+- **Dual-handle slider** to customize the visible time range on the planning
+- Default: 7:30 AM to 8:00 PM
+- Range: 00:00 to 23:45
+- Snaps to 15-minute intervals
+- **Live update**: Changes apply immediately without page refresh
+- Settings persist in localStorage across sessions
 
-> More customization options will be added to this menu in future versions.
+#### Event Colors Customization
+- **Per-type color customization**: Personalize colors for each course type:
+  - CM (Cours magistral)
+  - TD (Travaux dirigés)
+  - TP (Travaux pratiques)
+  - PRJ (Projet)
+  - TPA (TP en autonomie)
+  - IE (Évaluation)
+  - CLG (Cours de langue)
+  - COMM (Communication)
+- **Simple mode**: Pick one color and all states (normal, hover, active, border) are auto-generated
+- **Advanced mode**: Fine-tune each color state individually
+- **Live preview**: Interactive preview showing normal, hover, and click states
+- **Individual reset buttons**: Reset any single course type to default colors
+- **Full reset**: Reset all settings to defaults
+
+#### Profile Settings
+- **Profile picture toggle**: Show or hide your profile picture
+- When hidden, displays a default avatar icon placeholder
