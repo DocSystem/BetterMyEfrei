@@ -362,7 +362,7 @@
                                 <span class="bme-slider-tick-left">0h</span>
                                 <span class="bme-slider-value-label" id="bme-start-label">${decimalToTime(bmeSettings.planning.startTime)}</span>
                                 <span class="bme-slider-value-label" id="bme-end-label">${decimalToTime(bmeSettings.planning.endTime)}</span>
-                                <span class="bme-slider-tick-right">24h</span>
+                                <span class="bme-slider-tick-right">23h45</span>
                             </div>
                         </div>
                     </div>
@@ -388,16 +388,18 @@
         const endLabel = document.getElementById('bme-end-label');
         const labelsRow = document.querySelector('.bme-slider-labels-row');
 
-        // Fonction pour convertir position en valeur (0-24h)
+        const MAX_TIME = 23.75; // 23h45 max (24h cause des bugs)
+
+        // Fonction pour convertir position en valeur (0-23h45)
         function positionToValue(pos, sliderWidth) {
-            const rawValue = (pos / sliderWidth) * 24;
+            const rawValue = (pos / sliderWidth) * MAX_TIME;
             // Aimantation toutes les 15 minutes (0.25h)
-            return Math.round(rawValue * 4) / 4;
+            return Math.min(Math.round(rawValue * 4) / 4, MAX_TIME);
         }
 
         // Fonction pour convertir valeur en position
         function valueToPosition(value, sliderWidth) {
-            return (value / 24) * sliderWidth;
+            return (value / MAX_TIME) * sliderWidth;
         }
 
         // Mettre à jour l'affichage du slider
@@ -422,31 +424,37 @@
             const startLabelPos = startPos + labelPadding;
             const endLabelPos = endPos + labelPadding;
 
-            // Largeur des labels pour la détection de collision
+            // Largeur des labels et des ticks pour la détection de collision
             const startLabelWidth = startLabel.offsetWidth;
             const endLabelWidth = endLabel.offsetWidth;
+            const tickLeftWidth = document.querySelector('.bme-slider-tick-left').offsetWidth;
+            const tickRightWidth = document.querySelector('.bme-slider-tick-right').offsetWidth;
 
-            // Collision detection: si les labels se chevauchent, les décaler
-            const minGap = 4; // Espace minimum entre les labels
+            // Limites pour éviter de chevaucher 0h et 23h45
+            const minGap = 4; // Espace minimum entre les éléments
+            const minBoundary = tickLeftWidth + minGap + (startLabelWidth / 2);
+            const maxBoundary = labelsRowWidth - tickRightWidth - minGap - (endLabelWidth / 2);
+
+            // Collision detection entre les deux labels
             const centerDistance = endLabelPos - startLabelPos;
             const minDistance = (startLabelWidth / 2) + (endLabelWidth / 2) + minGap;
+
+            let finalStartPos = startLabelPos;
+            let finalEndPos = endLabelPos;
 
             if (centerDistance < minDistance) {
                 // Les labels se chevauchent, on les décale
                 const midPoint = (startLabelPos + endLabelPos) / 2;
-                const adjustedStartPos = midPoint - minDistance / 2;
-                const adjustedEndPos = midPoint + minDistance / 2;
-                
-                // S'assurer que les labels restent dans les limites
-                const minPos = startLabelWidth / 2;
-                const maxPos = labelsRowWidth - endLabelWidth / 2;
-                
-                startLabel.style.left = `${Math.max(minPos, adjustedStartPos)}px`;
-                endLabel.style.left = `${Math.min(maxPos, adjustedEndPos)}px`;
-            } else {
-                startLabel.style.left = `${startLabelPos}px`;
-                endLabel.style.left = `${endLabelPos}px`;
+                finalStartPos = midPoint - minDistance / 2;
+                finalEndPos = midPoint + minDistance / 2;
             }
+
+            // S'assurer que les labels restent dans les limites (ne pas chevaucher 0h et 23h45)
+            finalStartPos = Math.max(minBoundary, Math.min(finalStartPos, maxBoundary - minDistance));
+            finalEndPos = Math.min(maxBoundary, Math.max(finalEndPos, minBoundary + minDistance));
+
+            startLabel.style.left = `${finalStartPos}px`;
+            endLabel.style.left = `${finalEndPos}px`;
         }
 
         // Gérer le drag
