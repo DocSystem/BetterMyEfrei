@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Better MyEfrei
 // @namespace    https://www.myefrei.fr/
-// @version      0.6.0
+// @version      0.7.0
 // @description  Some improvements to MyEfrei UI!
 // @author       DocSystem & Doryan D. & Mathu_lmn & Mat15 & RemiVibert
 // @match        https://www.myefrei.fr/portal/student/*
@@ -30,6 +30,574 @@
 
     // Markers to avoid reprocessing
     const PROCESSED_ATTR = 'data-bme-processed';
+
+    // === Better MyEfrei — Settings System (by RemiVibert) ===
+    // Système de configuration persistant avec localStorage
+    const BME_SETTINGS_KEY = 'bme-settings';
+    const BME_DEFAULT_SETTINGS = {
+        planning: {
+            startTime: 7.5,  // 7h30 en décimal (7 + 30/60)
+            endTime: 20      // 20h00
+        }
+    };
+
+    // Charger les settings depuis localStorage ou utiliser les valeurs par défaut
+    function loadSettings() {
+        try {
+            const stored = localStorage.getItem(BME_SETTINGS_KEY);
+            if (stored) {
+                return { ...BME_DEFAULT_SETTINGS, ...JSON.parse(stored) };
+            }
+        } catch (e) {
+            console.error('BME: Error loading settings', e);
+        }
+        return { ...BME_DEFAULT_SETTINGS };
+    }
+
+    // Sauvegarder les settings dans localStorage
+    function saveSettings(settings) {
+        try {
+            localStorage.setItem(BME_SETTINGS_KEY, JSON.stringify(settings));
+            // Émettre un événement pour notifier les composants
+            w.dispatchEvent(new CustomEvent('bme-settings-update', { detail: settings }));
+        } catch (e) {
+            console.error('BME: Error saving settings', e);
+        }
+    }
+
+    // Settings global accessible
+    let bmeSettings = loadSettings();
+
+    // Convertir temps décimal en heures:minutes
+    function decimalToTime(decimal) {
+        const hours = Math.floor(decimal);
+        const minutes = Math.round((decimal - hours) * 60);
+        return `${hours}h${minutes.toString().padStart(2, '0')}`;
+    }
+
+    // Convertir temps décimal en { hour, minutes }
+    function decimalToHourMinutes(decimal) {
+        const hour = Math.floor(decimal);
+        const minutes = Math.round((decimal - hour) * 60);
+        return { hour, minutes };
+    }
+
+    // === Better MyEfrei — Settings Menu UI (by RemiVibert) ===
+    const BME_SETTINGS_CSS_ID = 'bme-settings-css';
+    if (!document.querySelector(`#${BME_SETTINGS_CSS_ID}`)) {
+        const css = document.createElement('style');
+        css.id = BME_SETTINGS_CSS_ID;
+        css.textContent = `
+    /* Bouton roue dentée flottant */
+    .bme-settings-btn {
+        position: fixed;
+        bottom: 24px;
+        right: 24px;
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        background: #0163DD;
+        border: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 4px 12px rgba(1, 99, 221, 0.4);
+        transition: all 0.3s ease;
+        z-index: 9999;
+    }
+    .bme-settings-btn:hover {
+        background: #0150b0;
+        transform: scale(1.1);
+        box-shadow: 0 6px 16px rgba(1, 99, 221, 0.5);
+    }
+    .bme-settings-btn:active {
+        transform: scale(0.95);
+    }
+    .bme-settings-btn svg {
+        width: 24px;
+        height: 24px;
+        fill: white;
+        transition: transform 0.5s ease;
+    }
+    .bme-settings-btn:hover svg {
+        transform: rotate(90deg);
+    }
+
+    /* Overlay de la popup */
+    .bme-settings-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        visibility: hidden;
+        transition: all 0.3s ease;
+    }
+    .bme-settings-overlay.open {
+        opacity: 1;
+        visibility: visible;
+    }
+
+    /* Popup de settings */
+    .bme-settings-popup {
+        background: white;
+        border-radius: 16px;
+        width: 480px;
+        max-width: 92vw;
+        max-height: 85vh;
+        overflow-y: auto;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        transform: translateY(20px) scale(0.95);
+        transition: all 0.3s ease;
+    }
+    .bme-settings-overlay.open .bme-settings-popup {
+        transform: translateY(0) scale(1);
+    }
+
+    /* Header de la popup */
+    .bme-settings-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 20px 24px;
+        border-bottom: 1px solid #e0e0e0;
+        background: linear-gradient(135deg, #0163DD 0%, #0150b0 100%);
+        border-radius: 16px 16px 0 0;
+    }
+    .bme-settings-header h2 {
+        margin: 0;
+        color: white;
+        font-size: 1.25rem;
+        font-weight: 600;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+    .bme-settings-header h2 svg {
+        width: 22px;
+        height: 22px;
+        fill: white;
+    }
+    .bme-settings-close {
+        background: rgba(255, 255, 255, 0.2);
+        border: none;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s ease;
+    }
+    .bme-settings-close:hover {
+        background: rgba(255, 255, 255, 0.3);
+    }
+    .bme-settings-close svg {
+        width: 18px;
+        height: 18px;
+        fill: white;
+    }
+
+    /* Contenu de la popup */
+    .bme-settings-content {
+        padding: 24px;
+    }
+
+    /* Section */
+    .bme-settings-section {
+        margin-bottom: 28px;
+    }
+    .bme-settings-section:last-child {
+        margin-bottom: 0;
+    }
+    .bme-settings-section-title {
+        font-size: 0.85rem;
+        font-weight: 600;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .bme-settings-section-title svg {
+        width: 18px;
+        height: 18px;
+        fill: #0163DD;
+    }
+
+    /* Dual Range Slider */
+    .bme-time-slider-container {
+        padding: 8px 0;
+    }
+    .bme-time-labels {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 20px;
+    }
+    .bme-time-label {
+        background: #f0f7ff;
+        border: 2px solid #0163DD;
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-weight: 600;
+        color: #0163DD;
+        font-size: 1.1rem;
+        min-width: 80px;
+        text-align: center;
+    }
+    .bme-time-label span {
+        display: block;
+        font-size: 0.7rem;
+        font-weight: 400;
+        color: #666;
+        margin-bottom: 2px;
+    }
+
+    /* Custom dual slider */
+    .bme-dual-slider {
+        position: relative;
+        height: 8px;
+        margin: 20px 10px;
+    }
+    .bme-slider-track {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 8px;
+        background: #e0e0e0;
+        border-radius: 4px;
+    }
+    .bme-slider-range {
+        position: absolute;
+        top: 0;
+        height: 8px;
+        background: linear-gradient(90deg, #0163DD 0%, #4d9fff 100%);
+        border-radius: 4px;
+    }
+    .bme-slider-thumb {
+        position: absolute;
+        top: 50%;
+        width: 24px;
+        height: 24px;
+        background: white;
+        border: 3px solid #0163DD;
+        border-radius: 50%;
+        transform: translate(-50%, -50%);
+        cursor: grab;
+        transition: box-shadow 0.2s ease, transform 0.1s ease;
+        z-index: 2;
+    }
+    .bme-slider-thumb:hover {
+        box-shadow: 0 0 0 8px rgba(1, 99, 221, 0.15);
+    }
+    .bme-slider-thumb:active {
+        cursor: grabbing;
+        box-shadow: 0 0 0 12px rgba(1, 99, 221, 0.2);
+        transform: translate(-50%, -50%) scale(1.1);
+    }
+    .bme-slider-thumb.dragging {
+        cursor: grabbing;
+        box-shadow: 0 0 0 12px rgba(1, 99, 221, 0.2);
+    }
+
+    /* Graduations du slider */
+    .bme-slider-ticks {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 12px;
+        padding: 0 10px;
+    }
+    .bme-slider-tick {
+        font-size: 0.7rem;
+        color: #999;
+        text-align: center;
+        width: 30px;
+        margin-left: -15px;
+    }
+    .bme-slider-tick:first-child {
+        margin-left: 0;
+        text-align: left;
+    }
+    .bme-slider-tick:last-child {
+        margin-left: auto;
+        margin-right: 0;
+        text-align: right;
+    }
+
+    /* Footer */
+    .bme-settings-footer {
+        padding: 16px 24px;
+        border-top: 1px solid #e0e0e0;
+        display: flex;
+        justify-content: flex-end;
+        gap: 12px;
+    }
+    .bme-settings-footer button {
+        padding: 10px 20px;
+        border-radius: 8px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+    .bme-btn-reset {
+        background: #f5f5f5;
+        border: 1px solid #ddd;
+        color: #666;
+    }
+    .bme-btn-reset:hover {
+        background: #eee;
+        border-color: #ccc;
+    }
+    .bme-btn-save {
+        background: #0163DD;
+        border: none;
+        color: white;
+    }
+    .bme-btn-save:hover {
+        background: #0150b0;
+    }
+
+    /* Info text */
+    .bme-settings-info {
+        font-size: 0.8rem;
+        color: #888;
+        margin-top: 12px;
+        text-align: center;
+        font-style: italic;
+    }
+`;
+        document.head.appendChild(css);
+    }
+
+    // Créer le bouton et le menu de settings
+    function createSettingsMenu() {
+        // Vérifier si déjà créé
+        if (document.querySelector('.bme-settings-btn')) return;
+
+        // Bouton roue dentée
+        const settingsBtn = document.createElement('button');
+        settingsBtn.className = 'bme-settings-btn';
+        settingsBtn.title = 'Better MyEfrei - Paramètres';
+        settingsBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
+            </svg>
+        `;
+        document.body.appendChild(settingsBtn);
+
+        // Overlay et popup
+        const overlay = document.createElement('div');
+        overlay.className = 'bme-settings-overlay';
+        overlay.innerHTML = `
+            <div class="bme-settings-popup">
+                <div class="bme-settings-header">
+                    <h2>
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.07-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.74,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.07,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 c0.05,0.24,0.24,0.41,0.48,0.41h3.84c0.24,0,0.44-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.47-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
+                        </svg>
+                        Better MyEfrei
+                    </h2>
+                    <button class="bme-settings-close" title="Fermer">
+                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+                        </svg>
+                    </button>
+                </div>
+                <div class="bme-settings-content">
+                    <div class="bme-settings-section">
+                        <div class="bme-settings-section-title">
+                            <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/>
+                            </svg>
+                            Plage horaire du planning
+                        </div>
+                        <div class="bme-time-slider-container">
+                            <div class="bme-time-labels">
+                                <div class="bme-time-label" id="bme-start-time-label">
+                                    <span>Début</span>
+                                    <span id="bme-start-time-value">${decimalToTime(bmeSettings.planning.startTime)}</span>
+                                </div>
+                                <div class="bme-time-label" id="bme-end-time-label">
+                                    <span>Fin</span>
+                                    <span id="bme-end-time-value">${decimalToTime(bmeSettings.planning.endTime)}</span>
+                                </div>
+                            </div>
+                            <div class="bme-dual-slider" id="bme-dual-slider">
+                                <div class="bme-slider-track"></div>
+                                <div class="bme-slider-range" id="bme-slider-range"></div>
+                                <div class="bme-slider-thumb" id="bme-thumb-start" data-type="start"></div>
+                                <div class="bme-slider-thumb" id="bme-thumb-end" data-type="end"></div>
+                            </div>
+                            <div class="bme-slider-ticks">
+                                <span class="bme-slider-tick">0h</span>
+                                <span class="bme-slider-tick">6h</span>
+                                <span class="bme-slider-tick">12h</span>
+                                <span class="bme-slider-tick">18h</span>
+                                <span class="bme-slider-tick">24h</span>
+                            </div>
+                            <p class="bme-settings-info">Faites glisser les curseurs pour définir la plage d'affichage du planning (aimantation toutes les 15 min)</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="bme-settings-footer">
+                    <button class="bme-btn-reset" id="bme-btn-reset">Réinitialiser</button>
+                    <button class="bme-btn-save" id="bme-btn-save">Enregistrer</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+
+        // Variables pour le slider
+        let tempSettings = { ...bmeSettings };
+        let isDragging = false;
+        let currentThumb = null;
+
+        const slider = document.getElementById('bme-dual-slider');
+        const thumbStart = document.getElementById('bme-thumb-start');
+        const thumbEnd = document.getElementById('bme-thumb-end');
+        const range = document.getElementById('bme-slider-range');
+        const startLabel = document.getElementById('bme-start-time-value');
+        const endLabel = document.getElementById('bme-end-time-value');
+
+        // Fonction pour convertir position en valeur (0-24h)
+        function positionToValue(pos, sliderWidth) {
+            const rawValue = (pos / sliderWidth) * 24;
+            // Aimantation toutes les 15 minutes (0.25h)
+            return Math.round(rawValue * 4) / 4;
+        }
+
+        // Fonction pour convertir valeur en position
+        function valueToPosition(value, sliderWidth) {
+            return (value / 24) * sliderWidth;
+        }
+
+        // Mettre à jour l'affichage du slider
+        function updateSliderUI() {
+            const sliderRect = slider.getBoundingClientRect();
+            const sliderWidth = sliderRect.width;
+
+            const startPos = valueToPosition(tempSettings.planning.startTime, sliderWidth);
+            const endPos = valueToPosition(tempSettings.planning.endTime, sliderWidth);
+
+            thumbStart.style.left = `${startPos}px`;
+            thumbEnd.style.left = `${endPos}px`;
+            range.style.left = `${startPos}px`;
+            range.style.width = `${endPos - startPos}px`;
+
+            startLabel.textContent = decimalToTime(tempSettings.planning.startTime);
+            endLabel.textContent = decimalToTime(tempSettings.planning.endTime);
+        }
+
+        // Gérer le drag
+        function handleDragStart(e, thumb) {
+            e.preventDefault();
+            isDragging = true;
+            currentThumb = thumb;
+            thumb.classList.add('dragging');
+            document.addEventListener('mousemove', handleDragMove);
+            document.addEventListener('mouseup', handleDragEnd);
+            document.addEventListener('touchmove', handleDragMove, { passive: false });
+            document.addEventListener('touchend', handleDragEnd);
+        }
+
+        function handleDragMove(e) {
+            if (!isDragging || !currentThumb) return;
+            e.preventDefault();
+
+            const sliderRect = slider.getBoundingClientRect();
+            const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+            let pos = clientX - sliderRect.left;
+            pos = Math.max(0, Math.min(pos, sliderRect.width));
+
+            const value = positionToValue(pos, sliderRect.width);
+            const type = currentThumb.dataset.type;
+
+            if (type === 'start') {
+                // Le curseur de début ne peut pas dépasser celui de fin
+                tempSettings.planning.startTime = Math.min(value, tempSettings.planning.endTime - 0.25);
+            } else {
+                // Le curseur de fin ne peut pas être avant celui de début
+                tempSettings.planning.endTime = Math.max(value, tempSettings.planning.startTime + 0.25);
+            }
+
+            updateSliderUI();
+        }
+
+        function handleDragEnd() {
+            if (currentThumb) {
+                currentThumb.classList.remove('dragging');
+            }
+            isDragging = false;
+            currentThumb = null;
+            document.removeEventListener('mousemove', handleDragMove);
+            document.removeEventListener('mouseup', handleDragEnd);
+            document.removeEventListener('touchmove', handleDragMove);
+            document.removeEventListener('touchend', handleDragEnd);
+        }
+
+        // Event listeners pour les thumbs
+        thumbStart.addEventListener('mousedown', (e) => handleDragStart(e, thumbStart));
+        thumbStart.addEventListener('touchstart', (e) => handleDragStart(e, thumbStart), { passive: false });
+        thumbEnd.addEventListener('mousedown', (e) => handleDragStart(e, thumbEnd));
+        thumbEnd.addEventListener('touchstart', (e) => handleDragStart(e, thumbEnd), { passive: false });
+
+        // Ouvrir/fermer le popup
+        function openSettings() {
+            tempSettings = JSON.parse(JSON.stringify(bmeSettings));
+            overlay.classList.add('open');
+            setTimeout(updateSliderUI, 50); // Attendre que le popup soit visible
+        }
+
+        function closeSettings() {
+            overlay.classList.remove('open');
+        }
+
+        settingsBtn.addEventListener('click', openSettings);
+        overlay.querySelector('.bme-settings-close').addEventListener('click', closeSettings);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) closeSettings();
+        });
+
+        // Bouton reset
+        document.getElementById('bme-btn-reset').addEventListener('click', () => {
+            tempSettings = JSON.parse(JSON.stringify(BME_DEFAULT_SETTINGS));
+            updateSliderUI();
+        });
+
+        // Bouton sauvegarder
+        document.getElementById('bme-btn-save').addEventListener('click', () => {
+            bmeSettings = JSON.parse(JSON.stringify(tempSettings));
+            saveSettings(bmeSettings);
+            closeSettings();
+            // Forcer le re-render du planning
+            const timeContent = document.querySelector('.rbc-time-content');
+            if (timeContent) {
+                timeContent.removeAttribute('data-bme-cropped');
+                timeContent.removeAttribute('data-bme-crop-period');
+            }
+        });
+
+        // Mettre à jour le slider après ouverture (pour calculer les dimensions)
+        setTimeout(updateSliderUI, 100);
+    }
+
+    // Créer le menu de settings au chargement
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', createSettingsMenu);
+    } else {
+        createSettingsMenu();
+    }
 
     // === Better MyEfrei — API Interceptor for Grades ===
     let latestGradesData = null;
@@ -408,29 +976,42 @@
         }
 
         // === Better MyEfrei — Crop Planning (by RemiVibert) ===
-        // Affiche uniquement les heures entre 7h30 et 20h, sans scroll
-        // Configuration : ces valeurs pourront être personnalisables dans une future version
-        const BME_PLANNING_CONFIG = {
-            START_HOUR: 7,
-            END_HOUR: 20,
-            OFFSET_START: 30, // en minutes après START_HOUR (7h30)
-            OFFSET_END: 0     // en minutes après END_HOUR (20h00)
-        };
+        // Affiche uniquement les heures configurées, sans scroll
+        // Les valeurs sont maintenant personnalisables via le menu de settings
 
         /**
-         * Crop le planning pour n'afficher que les heures entre 7h30 et 20h
+         * Récupère la configuration de planning depuis les settings
+         * Convertit le format décimal (7.5 = 7h30) en format { hour, minutes }
+         */
+        function getPlanningConfig() {
+            const startDecimal = bmeSettings.planning.startTime;
+            const endDecimal = bmeSettings.planning.endTime;
+            return {
+                START_HOUR: Math.floor(startDecimal),
+                END_HOUR: Math.floor(endDecimal),
+                OFFSET_START: Math.round((startDecimal - Math.floor(startDecimal)) * 60),
+                OFFSET_END: Math.round((endDecimal - Math.floor(endDecimal)) * 60)
+            };
+        }
+
+        /**
+         * Crop le planning pour n'afficher que les heures configurées
          * et supprime le scroll pour une vue complète sans défilement.
          */
         function cropPlanningToVisibleHours() {
             const timeContent = document.querySelector('.rbc-time-content');
             if (!timeContent) return;
 
-            // Clé de période pour éviter de réappliquer inutilement
-            const periodKey = document.querySelector('.label-date p')?.textContent?.trim()
-                || document.querySelector('.rbc-time-header-content')?.textContent?.trim()
-                || 'unknown-period';
+            // Récupérer la configuration dynamique depuis les settings
+            const config = getPlanningConfig();
 
-            // Si déjà traité pour cette période, on ne refait pas
+            // Clé de période incluant les settings pour forcer le refresh si changement
+            const settingsKey = `${bmeSettings.planning.startTime}-${bmeSettings.planning.endTime}`;
+            const periodKey = (document.querySelector('.label-date p')?.textContent?.trim()
+                || document.querySelector('.rbc-time-header-content')?.textContent?.trim()
+                || 'unknown-period') + '-' + settingsKey;
+
+            // Si déjà traité pour cette période avec ces settings, on ne refait pas
             if (timeContent.getAttribute('data-bme-crop-period') === periodKey &&
                 timeContent.getAttribute('data-bme-cropped') === '1') {
                 return;
@@ -446,8 +1027,8 @@
                 const label = group.querySelector('.rbc-label')?.textContent?.trim();
                 if (label) {
                     const hour = parseInt(label);
-                    if (hour === BME_PLANNING_CONFIG.START_HOUR) startGroup = group;
-                    if (hour === BME_PLANNING_CONFIG.END_HOUR) endGroup = group;
+                    if (hour === config.START_HOUR) startGroup = group;
+                    if (hour === config.END_HOUR) endGroup = group;
                 }
             }
 
@@ -458,8 +1039,8 @@
             const pxPerMinute = groupHeight / 60;
 
             // Calculer les offsets de début et fin
-            let startOffset = startGroup.offsetTop + (BME_PLANNING_CONFIG.OFFSET_START * pxPerMinute);
-            let endOffset = endGroup.offsetTop + (BME_PLANNING_CONFIG.OFFSET_END * pxPerMinute);
+            let startOffset = startGroup.offsetTop + (config.OFFSET_START * pxPerMinute);
+            let endOffset = endGroup.offsetTop + (config.OFFSET_END * pxPerMinute);
 
             // Hauteur visible finale
             const visibleHeight = endOffset - startOffset;

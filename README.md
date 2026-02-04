@@ -22,7 +22,8 @@ UI/UX tweaks for MyEfrei
   - Better colors
   - Show course type on planning page, without clicking on the course
   - Better course modal
-  - **Cropped schedule view** (by @RemiVibert): Display only hours between 7:30 AM and 8:00 PM without scrolling
+  - **Cropped schedule view** (by @RemiVibert): Display only hours between configurable start and end times without scrolling
+  - **Settings menu** (by @RemiVibert): Customization popup accessible via the gear icon in the bottom-right corner
 - Better Grades
   - Modern card-based layout for modules
   - Automatic average and ECTS tracking
@@ -35,7 +36,18 @@ UI/UX tweaks for MyEfrei
 
 ## Fork by RemiVibert
 
-This fork adds the following feature:
-- **Cropped Planning View**: The schedule is no longer scrollable and displays fully visible, showing only the hours between 7:30 AM and 8:00 PM. This makes it easier to see the entire day at a glance without scrolling.
+This fork adds the following features:
 
-> Note: A customization menu for this feature is planned for a future version.
+### Cropped Planning View
+The schedule is no longer scrollable and displays fully visible, showing only the configured time range. This makes it easier to see the entire day at a glance without scrolling.
+
+### Settings Menu (New in v0.7.0)
+A customization menu accessible via a **gear icon** in the bottom-right corner of the page. Currently includes:
+
+- **Time Range Slider**: A dual-handle slider to customize the visible time range on the planning:
+  - Default: 7:30 AM to 8:00 PM
+  - Range: 00:00 to 24:00
+  - Snaps to 15-minute intervals
+  - Settings are saved in localStorage and persist across sessions
+
+> More customization options will be added to this menu in future versions.
