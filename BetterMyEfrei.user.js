@@ -1,4 +1,4 @@
-// ==UserScript==
+﻿// ==UserScript==
 // @name         Better MyEfrei
 // @namespace    https://www.myefrei.fr/
 // @version      0.7.0
@@ -1491,7 +1491,7 @@
             }
 
             // Ajouter les alias (types de cours alternatifs qui partagent les mêmes couleurs)
-            const aliases = { CTD: 'TD', TD20: 'TD', CTP: 'TP', 'COURS.LANGUE': 'CLG', 'COURS.COMM': 'COMM' };
+            const aliases = { CTD: 'TD', TD20: 'TD', CTP: 'TP', 'COURS.LANGUE': 'CLG', 'COURS.COMM': 'COMM', CE: 'EXAM', DE: 'EXAM'};
             for (const [alias, original] of Object.entries(aliases)) {
                 const c = colors[original];
                 if (c) {
@@ -1831,6 +1831,8 @@
     CALENDAR_EVENT_COLORS.CTP = CALENDAR_EVENT_COLORS.TP;
     CALENDAR_EVENT_COLORS['COURS.LANGUE'] = CALENDAR_EVENT_COLORS.CLG;
     CALENDAR_EVENT_COLORS['COURS.COMM'] = CALENDAR_EVENT_COLORS.COMM;
+    CALENDAR_EVENT_COLORS.CE = CALENDAR_EVENT_COLORS.EXAM;
+    CALENDAR_EVENT_COLORS.DE = CALENDAR_EVENT_COLORS.EXAM;
     // Note: Les couleurs CSS sont maintenant générées dynamiquement par applyEventColors() dans le menu settings
     // pour permettre la personnalisation des couleurs par l'utilisateur
     if (!document.querySelector(`#${CUSTOM_CSS_ID}`)) {
@@ -2586,7 +2588,13 @@
     function getColorForType(type) {
         const t = (type || '').toUpperCase().trim();
         const fallback = '#0163DD';
-        return (CALENDAR_EVENT_COLORS[t]?.border) || fallback;
+        // Alias pour normaliser les types
+        const aliases = { CTD: 'TD', TD20: 'TD', CTP: 'TP', 'COURS.LANGUE': 'CLG', 'COURS.COMM': 'COMM', CE: 'EXAM', DE: 'EXAM' };
+        const normalizedType = aliases[t] || t;
+        // Priorité aux couleurs personnalisées, sinon couleurs par défaut
+        const userColors = bmeSettings?.eventColors?.[normalizedType];
+        const defaultColors = CALENDAR_EVENT_COLORS[normalizedType] || CALENDAR_EVENT_COLORS[t];
+        return userColors?.border || defaultColors?.border || fallback;
     }
 
     /* Utils */
@@ -2687,10 +2695,31 @@
         const codeModuleNode = Array.from(modal.querySelectorAll('.MuiTypography-root, p, span, div'))
             .find(el => /^code module\s*:/i.test((el.textContent || '').trim()));
         const codeModuleRaw = codeModuleNode?.textContent || '';
-        // ex: "Code module : ST2ADB-2526PSA01CM (Cours magistral)"
-        // → on garde l’identifiant entier mais on isole le suffixe CM/TD/TP/...
-        const typeFromCode = (codeModuleRaw.match(/([A-Z]{2,3})(?=\s*\(|$)/) || [, ''])[1];
+        // Note: certains codes se terminent par SCM, STP - on cherche les types connus
+        const knownTypes = ['CTD', 'TD20', 'CTP', 'CM', 'TD', 'TP', 'PRJ', 'TPA', 'IE', 'CLG', 'COMM', 'EXAM', 'CE', 'DE'];
+        let typeFromCode = '';
+        // Chercher dans la description entre parenthèses
+        const descMatch = codeModuleRaw.match(/\(([^)]+)\)/);
+        if (descMatch) {
+            const desc = descMatch[1].toUpperCase();
+            if (desc.includes('COURS MAGISTRAL') || desc.includes('MAGISTRAL')) typeFromCode = 'CM';
+            else if (desc.includes('TRAVAUX DIRIGÉS') || desc.includes('TRAVAUX DIRIGES') || desc.includes('TD')) typeFromCode = 'TD';
+            else if (desc.includes('TRAVAUX PRATIQUES') || desc.includes('TP')) typeFromCode = 'TP';
+            else if (desc.includes('PROJET')) typeFromCode = 'PRJ';
+            else if (desc.includes('ÉVALUATION') || desc.includes('EVALUATION') || desc.includes('CONTRÔLE') || desc.includes('CONTROLE')) typeFromCode = 'IE';
+            else if (desc.includes('EXAMEN') || desc.includes('EXAM')) typeFromCode = 'EXAM';
+        }
+        // Sinon chercher le type connu à la fin du code module
+        if (!typeFromCode) {
+            for (const t of knownTypes) {
+                if (new RegExp(`${t}(?:\\s*\\(|$)`, 'i').test(codeModuleRaw)) {
+                    typeFromCode = t;
+                    break;
+                }
+            }
+        }
         let typeText = (typeFromCode || chip?.textContent || 'CM').toUpperCase();
+
 
         if (modal.textContent.includes('COURS.LANGUE')) {
             typeText = 'CLG';
