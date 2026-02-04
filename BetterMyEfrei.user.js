@@ -51,7 +51,8 @@
     const BME_DEFAULT_SETTINGS = {
         planning: {
             startTime: 7.5,  // 7h30 en décimal (7 + 30/60)
-            endTime: 20      // 20h00
+            endTime: 20,     // 20h00
+            animationDuration: 200  // Durée de l'animation de transition en ms (0 = désactivé)
         },
         showProfilePicture: true,
         eventColors: JSON.parse(JSON.stringify(BME_DEFAULT_EVENT_COLORS))
@@ -455,6 +456,78 @@
         transform: translateX(18px);
     }
 
+    /* Input number pour animation */
+    .bme-input-number {
+        width: 80px;
+        padding: 6px 10px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 0.875rem;
+        text-align: center;
+        outline: none;
+        transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .bme-input-number:focus {
+        border-color: #163767;
+        box-shadow: 0 0 0 2px rgba(22, 55, 103, 0.15);
+    }
+
+    /* Groupe input + info */
+    .bme-input-with-info {
+        display: flex;
+        align-items: stretch;
+    }
+    .bme-input-with-info .bme-input-number {
+        border-top-right-radius: 0;
+        border-bottom-right-radius: 0;
+        border-right: none;
+    }
+    .bme-info-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        background: #f3f4f6;
+        border: 1px solid #d1d5db;
+        border-left: none;
+        border-radius: 0 6px 6px 0;
+        color: #6b7280;
+        font-size: 0.75rem;
+        cursor: help;
+        position: relative;
+    }
+    .bme-info-icon:hover {
+        background: #e5e7eb;
+        color: #374151;
+    }
+    .bme-info-icon svg {
+        width: 14px;
+        height: 14px;
+        fill: currentColor;
+    }
+    .bme-info-icon::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        bottom: calc(100% + 6px);
+        right: 0;
+        background: #1f2937;
+        color: white;
+        padding: 6px 10px;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        white-space: nowrap;
+        opacity: 0;
+        visibility: hidden;
+        transition: opacity 0.15s, visibility 0.15s;
+        pointer-events: none;
+        z-index: 100;
+    }
+    .bme-info-icon:hover::after {
+        opacity: 1;
+        visibility: visible;
+    }
+    }
+
     /* Bouton retour */
     .bme-back-button {
         background: transparent;
@@ -791,6 +864,30 @@
                             </div>
                         </div>
 
+                        <!-- Section animation -->
+                        <div class="bme-settings-section">
+                            <div class="bme-settings-section-title">
+                                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M13 2.05v2.02c3.95.49 7 3.85 7 7.93 0 3.21-1.92 6-4.72 7.28L13 17v5h5l-1.22-1.22C19.91 19.07 22 15.76 22 12c0-5.18-3.95-9.45-9-9.95zM11 2.05C5.94 2.55 2 6.81 2 12c0 3.76 2.09 7.07 5.22 8.78L6 22h5v-5l-2.28 2.28C5.92 18 4 15.21 4 12c0-4.08 3.05-7.44 7-7.93V2.05z"/>
+                                </svg>
+                                Animation de transition
+                            </div>
+                            <div class="bme-toggle-row">
+                                <span class="bme-toggle-label">
+                                    <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                    </svg>
+                                    Durée (ms)
+                                </span>
+                                <div class="bme-input-with-info">
+                                    <input type="number" id="bme-animation-duration" class="bme-input-number" min="0" max="1000" step="50" value="${bmeSettings.planning.animationDuration || 0}" placeholder="200">
+                                    <span class="bme-info-icon" data-tooltip="0 = désactivé, 100-250 recommandé">
+                                        <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
                         <!-- Section thème -->
                         <div class="bme-settings-section">
                             <div class="bme-settings-section-title">
@@ -1040,6 +1137,16 @@
         toggleProfilePic.addEventListener('click', () => {
             tempSettings.showProfilePicture = !tempSettings.showProfilePicture;
             toggleProfilePic.classList.toggle('active', tempSettings.showProfilePicture);
+        });
+
+        // === Input durée animation ===
+        const animationInput = document.getElementById('bme-animation-duration');
+        animationInput.addEventListener('change', () => {
+            let val = parseInt(animationInput.value, 10);
+            if (isNaN(val) || val < 0) val = 0;
+            if (val > 1000) val = 1000;
+            animationInput.value = val;
+            tempSettings.planning.animationDuration = val;
         });
 
         // === Système de thème ===
@@ -1468,6 +1575,14 @@
             if (timeContent) {
                 timeContent.removeAttribute('data-bme-cropped');
                 timeContent.removeAttribute('data-bme-crop-period');
+                // Mettre à jour la durée d'animation
+                const duration = bmeSettings.planning.animationDuration || 0;
+                if (duration > 0) {
+                    timeContent.classList.add('bme-week-animate');
+                    timeContent.style.setProperty('--bme-anim-duration', duration + 'ms');
+                } else {
+                    timeContent.classList.remove('bme-week-animate');
+                }
                 w.dispatchEvent(new CustomEvent('bme-settings-update', { detail: bmeSettings }));
             }
         }
@@ -1613,6 +1728,7 @@
         document.getElementById('bme-btn-reset').addEventListener('click', () => {
             tempSettings = JSON.parse(JSON.stringify(BME_DEFAULT_SETTINGS));
             toggleProfilePic.classList.toggle('active', tempSettings.showProfilePicture);
+            animationInput.value = tempSettings.planning.animationDuration;
             updateSliderUI();
         });
 
@@ -1836,6 +1952,39 @@
         animation: bme-ripple-anim 0.6s ease-out;
         pointer-events: none;
     }
+
+    /* Animation de transition de semaine - Slide horizontal */
+    @keyframes bme-slide-in-right {
+        from {
+            transform: translateX(300px);
+        }
+        to {
+            transform: translateX(0);
+        }
+    }
+
+    @keyframes bme-slide-in-left {
+        from {
+            transform: translateX(-300px);
+        }
+        to {
+            transform: translateX(0);
+        }
+    }
+
+    .bme-week-animate.bme-slide-right .rbc-event {
+        animation: bme-slide-in-right var(--bme-anim-duration, 200ms) ease-out forwards;
+    }
+
+    .bme-week-animate.bme-slide-left .rbc-event {
+        animation: bme-slide-in-left var(--bme-anim-duration, 200ms) ease-out forwards;
+    }
+
+    /* Cacher le débordement horizontal pendant l'animation */
+    .bme-week-animate.bme-slide-right,
+    .bme-week-animate.bme-slide-left {
+        overflow-x: clip;
+    }
   `;
         document.head.appendChild(navCss);
     }
@@ -1928,6 +2077,70 @@
         reorganizeCalendarNavigation();
     });
     navObserver.observe(document.body, { childList: true, subtree: true });
+
+    // === Animation de transition de semaine ===
+    // Ajoute un effet de fade lors du changement de semaine
+    let bmeLastWeekLabel = null;
+    let bmeAnimating = false;
+
+    function setupWeekAnimation() {
+        const timeContent = document.querySelector('.rbc-time-content');
+        if (!timeContent) return;
+
+        const duration = bmeSettings.planning.animationDuration || 0;
+        if (duration > 0) {
+            timeContent.classList.add('bme-week-animate');
+            timeContent.style.setProperty('--bme-anim-duration', duration + 'ms');
+        } else {
+            timeContent.classList.remove('bme-week-animate', 'bme-slide-left', 'bme-slide-right');
+        }
+    }
+
+    // Intercepte les clics sur les boutons de navigation pour déclencher l'animation
+    function setupNavAnimationTriggers() {
+        const navGroup = document.querySelector('.bme-nav-group');
+        if (!navGroup || navGroup.dataset.bmeAnimSetup) return;
+        navGroup.dataset.bmeAnimSetup = '1';
+
+        const buttons = navGroup.querySelectorAll('button');
+        buttons.forEach((btn, index) => {
+            btn.addEventListener('click', () => {
+                const duration = bmeSettings.planning.animationDuration || 0;
+                if (duration <= 0 || bmeAnimating) return;
+
+                const timeContent = document.querySelector('.rbc-time-content');
+                if (!timeContent) return;
+
+                bmeAnimating = true;
+                
+                // Déterminer la direction : premier bouton = gauche (semaine précédente), dernier = droite (semaine suivante)
+                const isLeft = index === 0;
+                const slideClass = isLeft ? 'bme-slide-left' : 'bme-slide-right';
+                
+                // Attendre un court instant que le nouveau contenu soit chargé, puis animer
+                setTimeout(() => {
+                    timeContent.classList.add(slideClass);
+                    
+                    setTimeout(() => {
+                        timeContent.classList.remove(slideClass);
+                        bmeAnimating = false;
+                    }, duration);
+                }, 50);
+            });
+        });
+    }
+
+    const weekChangeObserver = new MutationObserver(() => {
+        setupWeekAnimation();
+        setupNavAnimationTriggers();
+
+        // Tracker le changement de semaine
+        const weekLabel = document.querySelector('.rbc-toolbar p, .label-date p');
+        if (weekLabel) {
+            bmeLastWeekLabel = weekLabel.textContent;
+        }
+    });
+    weekChangeObserver.observe(document.body, { childList: true, subtree: true });
 
     const CALENDAR_EVENT_COLORS = {
         CM: {

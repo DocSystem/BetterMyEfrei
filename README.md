@@ -24,6 +24,7 @@ UI/UX tweaks for MyEfrei
   - Better course modal
   - **Cropped schedule view** (by @RemiVibert): Display only hours between configurable start and end times without scrolling
   - **Improved navigation** (by @RemiVibert): date indicator and navigation buttons swapped for better UX - all navigation controls (prev/today/next) are now grouped together in a single bordered container
+  - **Week transition animation** (by @RemiVibert): Smooth slide animation when navigating between weeks, with configurable duration
   - **Settings menu** (by @RemiVibert): Customization popup accessible via the profile menu
   - **Event color customization** (by @RemiVibert): Personalize colors for each course type (CM, TD, TP, etc.)
   - **Profile picture toggle** (by @RemiVibert): Option to hide your profile picture
@@ -61,6 +62,11 @@ A customization menu accessible via the **"Better myEfrei" button** in the profi
 - **Better UX**: The week indicator now has a fixed position (doesn't shift when text changes), preventing the navigation buttons from moving around
 - **Hover effects**: Each button has its own hover effect that stays within its boundaries
 - **Ripple animation**: Click animations are contained within each individual button
+
+#### Week Transition Animation
+- **Smooth slide animation**: Events slide in from the side when navigating between weeks
+- **Configurable duration**: Adjust animation speed in settings (0 to disable, 100-250ms recommended)
+- **Events only**: Animation applies to course events, not the grid or time labels
 
 #### Event Colors Customization
 - **Per-type color customization**: Personalize colors for each course type:
