@@ -215,7 +215,7 @@
     CALENDAR_EVENT_COLORS.TD20 = CALENDAR_EVENT_COLORS.TD;
     CALENDAR_EVENT_COLORS.CTP = CALENDAR_EVENT_COLORS.TP;
     CALENDAR_EVENT_COLORS.CLG = CALENDAR_EVENT_COLORS['COURS.LANGUE'];
-    CALENDAR_EVENT_COLORS.COM = CALENDAR_EVENT_COLORS['COURS.COMM'];
+    CALENDAR_EVENT_COLORS.COMM = CALENDAR_EVENT_COLORS['COURS.COMM'];
     for (let key of Object.keys(CALENDAR_EVENT_COLORS)) {
         const safeKey = key.replace(/\./g, '\\.');
         CUSTOM_CSS += `.course.course-${safeKey}:not(.chip-color) { background-color: ${CALENDAR_EVENT_COLORS[key].normal} !important; }`;
@@ -255,7 +255,7 @@
         ['TPA', 'TPA (Travaux pratiques en autonomie)'],
         ['IE', 'IE (Intervention Entreprise)'],
         ['CLG', 'Cours de langue'],
-        ['COM', 'Cours de communication'],
+        ['COMM', 'Cours de communication'],
     ];
 
     const EXAM_COLOR = '#FF7EB8';
@@ -359,7 +359,7 @@
             if (eventData && chipElem) {
                 let newText = String(eventData.courseActivity ?? '').trim();
                 if (newText === 'COURS.LANGUE') newText = 'CLG';
-                if (newText === 'COURS.COMM') newText = 'COM';
+                if (newText === 'COURS.COMM') newText = 'COMM';
 
                 // Only update if different to avoid unnecessary mutations
                 if (newText && chipElem.textContent !== newText) {
@@ -1030,7 +1030,7 @@
             typeText = 'CLG';
         }
         if (modal.textContent.includes('COURS.COMM')) {
-            typeText = 'COM';
+            typeText = 'COMM';
         }
 
         /* Couleur et libellé du chip (forcer CM/TD/TP/PRJ…) */
