@@ -95,250 +95,226 @@
         left: 0;
         right: 0;
         bottom: 0;
-        background: rgba(0, 0, 0, 0.5);
+        background: rgba(0, 0, 0, 0.4);
         z-index: 10000;
         display: flex;
         align-items: center;
         justify-content: center;
         opacity: 0;
         visibility: hidden;
-        transition: all 0.3s ease;
+        transition: all 0.2s ease;
     }
     .bme-settings-overlay.open {
         opacity: 1;
         visibility: visible;
     }
 
-    /* Popup de settings */
+    /* Popup de settings - style natif MyEfrei */
     .bme-settings-popup {
         background: white;
-        border-radius: 16px;
-        width: 480px;
+        border-radius: 8px;
+        width: 420px;
         max-width: 92vw;
         max-height: 85vh;
         overflow-y: auto;
-        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-        transform: translateY(20px) scale(0.95);
-        transition: all 0.3s ease;
+        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+        transform: translateY(10px);
+        transition: all 0.2s ease;
     }
     .bme-settings-overlay.open .bme-settings-popup {
-        transform: translateY(0) scale(1);
+        transform: translateY(0);
     }
 
-    /* Header de la popup */
+    /* Header de la popup - style sobre */
     .bme-settings-header {
         display: flex;
         align-items: center;
         justify-content: space-between;
-        padding: 20px 24px;
-        border-bottom: 1px solid #e0e0e0;
-        background: linear-gradient(135deg, #163767 0%, #0e2444 100%);
-        border-radius: 16px 16px 0 0;
+        padding: 16px 20px;
+        border-bottom: 1px solid #e5e7eb;
+        background: #f8fafc;
     }
     .bme-settings-header h2 {
         margin: 0;
-        color: white;
-        font-size: 1.25rem;
+        color: #163767;
+        font-size: 1rem;
         font-weight: 600;
         display: flex;
         align-items: center;
-        gap: 10px;
+        gap: 8px;
     }
     .bme-settings-header h2 svg {
-        width: 22px;
-        height: 22px;
-        fill: white;
+        width: 20px;
+        height: 20px;
+        fill: #163767;
     }
     .bme-settings-close {
-        background: rgba(255, 255, 255, 0.2);
-        border: none;
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
+        background: transparent;
+        border: 1px solid #d1d5db;
+        width: 28px;
+        height: 28px;
+        border-radius: 4px;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: all 0.2s ease;
+        transition: all 0.15s ease;
+        color: #6b7280;
     }
     .bme-settings-close:hover {
-        background: rgba(255, 255, 255, 0.3);
+        background: #f3f4f6;
+        border-color: #9ca3af;
     }
     .bme-settings-close svg {
-        width: 18px;
-        height: 18px;
-        fill: white;
+        width: 16px;
+        height: 16px;
+        fill: currentColor;
     }
 
     /* Contenu de la popup */
     .bme-settings-content {
-        padding: 24px;
+        padding: 20px;
     }
 
     /* Section */
     .bme-settings-section {
-        margin-bottom: 28px;
+        margin-bottom: 20px;
     }
     .bme-settings-section:last-child {
         margin-bottom: 0;
     }
     .bme-settings-section-title {
-        font-size: 0.85rem;
-        font-weight: 600;
-        color: #666;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: #6b7280;
         margin-bottom: 16px;
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
     }
     .bme-settings-section-title svg {
-        width: 18px;
-        height: 18px;
-        fill: #163767;
+        width: 16px;
+        height: 16px;
+        fill: #6b7280;
     }
 
     /* Dual Range Slider */
     .bme-time-slider-container {
-        padding: 8px 0;
-    }
-    .bme-time-labels {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 20px;
-    }
-    .bme-time-label {
-        background: #eef3f8;
-        border: 2px solid #163767;
-        border-radius: 8px;
-        padding: 8px 16px;
-        font-weight: 600;
-        color: #163767;
-        font-size: 1.1rem;
-        min-width: 80px;
-        text-align: center;
-    }
-    .bme-time-label span {
-        display: block;
-        font-size: 0.7rem;
-        font-weight: 400;
-        color: #666;
-        margin-bottom: 2px;
+        padding: 0;
     }
 
     /* Custom dual slider */
     .bme-dual-slider {
         position: relative;
-        height: 8px;
-        margin: 20px 10px;
+        height: 6px;
+        margin: 8px 12px 0 12px;
     }
     .bme-slider-track {
         position: absolute;
         top: 0;
         left: 0;
         right: 0;
-        height: 8px;
-        background: #e0e0e0;
-        border-radius: 4px;
+        height: 6px;
+        background: #e5e7eb;
+        border-radius: 3px;
     }
     .bme-slider-range {
         position: absolute;
         top: 0;
-        height: 8px;
-        background: linear-gradient(90deg, #163767 0%, #3a6ea5 100%);
-        border-radius: 4px;
+        height: 6px;
+        background: #163767;
+        border-radius: 3px;
     }
     .bme-slider-thumb {
         position: absolute;
         top: 50%;
-        width: 24px;
-        height: 24px;
+        width: 18px;
+        height: 18px;
         background: white;
-        border: 3px solid #163767;
+        border: 2px solid #163767;
         border-radius: 50%;
         transform: translate(-50%, -50%);
         cursor: grab;
-        transition: box-shadow 0.2s ease, transform 0.1s ease;
+        transition: box-shadow 0.15s ease;
         z-index: 2;
     }
     .bme-slider-thumb:hover {
-        box-shadow: 0 0 0 8px rgba(22, 55, 103, 0.15);
+        box-shadow: 0 0 0 4px rgba(22, 55, 103, 0.1);
     }
-    .bme-slider-thumb:active {
-        cursor: grabbing;
-        box-shadow: 0 0 0 12px rgba(22, 55, 103, 0.2);
-        transform: translate(-50%, -50%) scale(1.1);
-    }
+    .bme-slider-thumb:active,
     .bme-slider-thumb.dragging {
         cursor: grabbing;
-        box-shadow: 0 0 0 12px rgba(22, 55, 103, 0.2);
+        box-shadow: 0 0 0 6px rgba(22, 55, 103, 0.15);
     }
 
-    /* Graduations du slider */
-    .bme-slider-ticks {
+    /* Labels et ticks sur la même ligne */
+    .bme-slider-labels-row {
         display: flex;
-        justify-content: space-between;
-        margin-top: 12px;
-        padding: 0 10px;
+        align-items: center;
+        margin-top: 10px;
+        padding: 0 12px;
+        position: relative;
+        height: 20px;
     }
-    .bme-slider-tick {
-        font-size: 0.7rem;
-        color: #999;
-        text-align: center;
-        width: 30px;
-        margin-left: -15px;
+    .bme-slider-tick-left {
+        font-size: 0.75rem;
+        color: #9ca3af;
+        position: absolute;
+        left: 0;
     }
-    .bme-slider-tick:first-child {
-        margin-left: 0;
-        text-align: left;
+    .bme-slider-tick-right {
+        font-size: 0.75rem;
+        color: #9ca3af;
+        position: absolute;
+        right: 0;
     }
-    .bme-slider-tick:last-child {
-        margin-left: auto;
-        margin-right: 0;
-        text-align: right;
+    .bme-slider-value-label {
+        position: absolute;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: #163767;
+        background: #eef3f8;
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid #d1d5db;
+        transform: translateX(-50%);
+        white-space: nowrap;
     }
 
-    /* Footer */
+    /* Footer - style bouton "Aujourd'hui" */
     .bme-settings-footer {
-        padding: 16px 24px;
-        border-top: 1px solid #e0e0e0;
+        padding: 12px 20px;
+        border-top: 1px solid #e5e7eb;
         display: flex;
         justify-content: flex-end;
-        gap: 12px;
+        gap: 8px;
+        background: #f8fafc;
     }
     .bme-settings-footer button {
-        padding: 10px 20px;
-        border-radius: 8px;
+        padding: 6px 14px;
+        border-radius: 4px;
+        font-size: 0.875rem;
         font-weight: 500;
         cursor: pointer;
-        transition: all 0.2s ease;
+        transition: all 0.15s ease;
     }
     .bme-btn-reset {
-        background: #f5f5f5;
-        border: 1px solid #ddd;
-        color: #666;
+        background: white;
+        border: 1px solid #d1d5db;
+        color: #374151;
     }
     .bme-btn-reset:hover {
-        background: #eee;
-        border-color: #ccc;
+        background: #f9fafb;
+        border-color: #9ca3af;
     }
     .bme-btn-save {
-        background: #163767;
-        border: none;
-        color: white;
+        background: white;
+        border: 1px solid #163767;
+        color: #163767;
     }
     .bme-btn-save:hover {
-        background: #0e2444;
-    }
-
-    /* Info text */
-    .bme-settings-info {
-        font-size: 0.8rem;
-        color: #888;
-        margin-top: 12px;
-        text-align: center;
-        font-style: italic;
+        background: #163767;
+        color: white;
     }
 `;
         document.head.appendChild(css);
@@ -376,25 +352,17 @@
                             Plage horaire du planning
                         </div>
                         <div class="bme-time-slider-container">
-                            <div class="bme-time-labels">
-                                <div class="bme-time-label" id="bme-start-time-label">
-                                    <span>Début</span>
-                                    <span id="bme-start-time-value">${decimalToTime(bmeSettings.planning.startTime)}</span>
-                                </div>
-                                <div class="bme-time-label" id="bme-end-time-label">
-                                    <span>Fin</span>
-                                    <span id="bme-end-time-value">${decimalToTime(bmeSettings.planning.endTime)}</span>
-                                </div>
-                            </div>
                             <div class="bme-dual-slider" id="bme-dual-slider">
                                 <div class="bme-slider-track"></div>
                                 <div class="bme-slider-range" id="bme-slider-range"></div>
                                 <div class="bme-slider-thumb" id="bme-thumb-start" data-type="start"></div>
                                 <div class="bme-slider-thumb" id="bme-thumb-end" data-type="end"></div>
                             </div>
-                            <div class="bme-slider-ticks">
-                                <span class="bme-slider-tick">0h</span>
-                                <span class="bme-slider-tick">24h</span>
+                            <div class="bme-slider-labels-row">
+                                <span class="bme-slider-tick-left">0h</span>
+                                <span class="bme-slider-value-label" id="bme-start-label">${decimalToTime(bmeSettings.planning.startTime)}</span>
+                                <span class="bme-slider-value-label" id="bme-end-label">${decimalToTime(bmeSettings.planning.endTime)}</span>
+                                <span class="bme-slider-tick-right">24h</span>
                             </div>
                         </div>
                     </div>
@@ -416,8 +384,9 @@
         const thumbStart = document.getElementById('bme-thumb-start');
         const thumbEnd = document.getElementById('bme-thumb-end');
         const range = document.getElementById('bme-slider-range');
-        const startLabel = document.getElementById('bme-start-time-value');
-        const endLabel = document.getElementById('bme-end-time-value');
+        const startLabel = document.getElementById('bme-start-label');
+        const endLabel = document.getElementById('bme-end-label');
+        const labelsRow = document.querySelector('.bme-slider-labels-row');
 
         // Fonction pour convertir position en valeur (0-24h)
         function positionToValue(pos, sliderWidth) {
@@ -435,6 +404,7 @@
         function updateSliderUI() {
             const sliderRect = slider.getBoundingClientRect();
             const sliderWidth = sliderRect.width;
+            const labelsRowWidth = labelsRow.getBoundingClientRect().width;
 
             const startPos = valueToPosition(tempSettings.planning.startTime, sliderWidth);
             const endPos = valueToPosition(tempSettings.planning.endTime, sliderWidth);
@@ -446,6 +416,37 @@
 
             startLabel.textContent = decimalToTime(tempSettings.planning.startTime);
             endLabel.textContent = decimalToTime(tempSettings.planning.endTime);
+
+            // Positionnement des labels sous les curseurs (tenir compte du padding de 12px)
+            const labelPadding = 12;
+            const startLabelPos = startPos + labelPadding;
+            const endLabelPos = endPos + labelPadding;
+
+            // Largeur des labels pour la détection de collision
+            const startLabelWidth = startLabel.offsetWidth;
+            const endLabelWidth = endLabel.offsetWidth;
+
+            // Collision detection: si les labels se chevauchent, les décaler
+            const minGap = 4; // Espace minimum entre les labels
+            const centerDistance = endLabelPos - startLabelPos;
+            const minDistance = (startLabelWidth / 2) + (endLabelWidth / 2) + minGap;
+
+            if (centerDistance < minDistance) {
+                // Les labels se chevauchent, on les décale
+                const midPoint = (startLabelPos + endLabelPos) / 2;
+                const adjustedStartPos = midPoint - minDistance / 2;
+                const adjustedEndPos = midPoint + minDistance / 2;
+                
+                // S'assurer que les labels restent dans les limites
+                const minPos = startLabelWidth / 2;
+                const maxPos = labelsRowWidth - endLabelWidth / 2;
+                
+                startLabel.style.left = `${Math.max(minPos, adjustedStartPos)}px`;
+                endLabel.style.left = `${Math.min(maxPos, adjustedEndPos)}px`;
+            } else {
+                startLabel.style.left = `${startLabelPos}px`;
+                endLabel.style.left = `${endLabelPos}px`;
+            }
         }
 
         // Gérer le drag
