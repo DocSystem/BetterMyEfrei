@@ -41,13 +41,15 @@ This fork adds the following features:
 ### Cropped Planning View
 The schedule is no longer scrollable and displays fully visible, showing only the configured time range. This makes it easier to see the entire day at a glance without scrolling.
 
-### Settings Menu (New in v0.7.0)
-A customization menu accessible via a **gear icon** in the bottom-right corner of the page. Currently includes:
+### Settings Menu (v0.7.0)
+A customization menu accessible via a **gear icon** in the bottom-right corner of the page. Features:
 
-- **Time Range Slider**: A dual-handle slider to customize the visible time range on the planning:
+- **Time Range Slider**: A dual-handle slider to customize the visible time range on the planning
   - Default: 7:30 AM to 8:00 PM
   - Range: 00:00 to 24:00
   - Snaps to 15-minute intervals
-  - Settings are saved in localStorage and persist across sessions
+  - **Live update**: Changes apply immediately without page refresh
+  - Settings persist in localStorage across sessions
+- Uses the site's native color theme for seamless integration
 
 > More customization options will be added to this menu in future versions.

@@ -96,20 +96,20 @@
         width: 48px;
         height: 48px;
         border-radius: 50%;
-        background: #0163DD;
+        background: #163767;
         border: none;
         cursor: pointer;
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 4px 12px rgba(1, 99, 221, 0.4);
+        box-shadow: 0 4px 12px rgba(22, 55, 103, 0.4);
         transition: all 0.3s ease;
         z-index: 9999;
     }
     .bme-settings-btn:hover {
-        background: #0150b0;
+        background: #0e2444;
         transform: scale(1.1);
-        box-shadow: 0 6px 16px rgba(1, 99, 221, 0.5);
+        box-shadow: 0 6px 16px rgba(22, 55, 103, 0.5);
     }
     .bme-settings-btn:active {
         transform: scale(0.95);
@@ -168,7 +168,7 @@
         justify-content: space-between;
         padding: 20px 24px;
         border-bottom: 1px solid #e0e0e0;
-        background: linear-gradient(135deg, #0163DD 0%, #0150b0 100%);
+        background: linear-gradient(135deg, #163767 0%, #0e2444 100%);
         border-radius: 16px 16px 0 0;
     }
     .bme-settings-header h2 {
@@ -232,7 +232,7 @@
     .bme-settings-section-title svg {
         width: 18px;
         height: 18px;
-        fill: #0163DD;
+        fill: #163767;
     }
 
     /* Dual Range Slider */
@@ -245,12 +245,12 @@
         margin-bottom: 20px;
     }
     .bme-time-label {
-        background: #f0f7ff;
-        border: 2px solid #0163DD;
+        background: #eef3f8;
+        border: 2px solid #163767;
         border-radius: 8px;
         padding: 8px 16px;
         font-weight: 600;
-        color: #0163DD;
+        color: #163767;
         font-size: 1.1rem;
         min-width: 80px;
         text-align: center;
@@ -282,7 +282,7 @@
         position: absolute;
         top: 0;
         height: 8px;
-        background: linear-gradient(90deg, #0163DD 0%, #4d9fff 100%);
+        background: linear-gradient(90deg, #163767 0%, #3a6ea5 100%);
         border-radius: 4px;
     }
     .bme-slider-thumb {
@@ -291,7 +291,7 @@
         width: 24px;
         height: 24px;
         background: white;
-        border: 3px solid #0163DD;
+        border: 3px solid #163767;
         border-radius: 50%;
         transform: translate(-50%, -50%);
         cursor: grab;
@@ -299,16 +299,16 @@
         z-index: 2;
     }
     .bme-slider-thumb:hover {
-        box-shadow: 0 0 0 8px rgba(1, 99, 221, 0.15);
+        box-shadow: 0 0 0 8px rgba(22, 55, 103, 0.15);
     }
     .bme-slider-thumb:active {
         cursor: grabbing;
-        box-shadow: 0 0 0 12px rgba(1, 99, 221, 0.2);
+        box-shadow: 0 0 0 12px rgba(22, 55, 103, 0.2);
         transform: translate(-50%, -50%) scale(1.1);
     }
     .bme-slider-thumb.dragging {
         cursor: grabbing;
-        box-shadow: 0 0 0 12px rgba(1, 99, 221, 0.2);
+        box-shadow: 0 0 0 12px rgba(22, 55, 103, 0.2);
     }
 
     /* Graduations du slider */
@@ -360,12 +360,12 @@
         border-color: #ccc;
     }
     .bme-btn-save {
-        background: #0163DD;
+        background: #163767;
         border: none;
         color: white;
     }
     .bme-btn-save:hover {
-        background: #0150b0;
+        background: #0e2444;
     }
 
     /* Info text */
@@ -441,12 +441,8 @@
                             </div>
                             <div class="bme-slider-ticks">
                                 <span class="bme-slider-tick">0h</span>
-                                <span class="bme-slider-tick">6h</span>
-                                <span class="bme-slider-tick">12h</span>
-                                <span class="bme-slider-tick">18h</span>
                                 <span class="bme-slider-tick">24h</span>
                             </div>
-                            <p class="bme-settings-info">Faites glisser les curseurs pour définir la plage d'affichage du planning (aimantation toutes les 15 min)</p>
                         </div>
                     </div>
                 </div>
@@ -580,11 +576,13 @@
             bmeSettings = JSON.parse(JSON.stringify(tempSettings));
             saveSettings(bmeSettings);
             closeSettings();
-            // Forcer le re-render du planning
+            // Forcer le re-render du planning immédiatement
             const timeContent = document.querySelector('.rbc-time-content');
             if (timeContent) {
                 timeContent.removeAttribute('data-bme-cropped');
                 timeContent.removeAttribute('data-bme-crop-period');
+                // Émettre un événement pour déclencher le re-crop
+                w.dispatchEvent(new CustomEvent('bme-settings-update', { detail: bmeSettings }));
             }
         });
 
@@ -1106,6 +1104,16 @@
         calendarObserver.observe(calendar, {
             childList: true,
             subtree: true
+        });
+
+        // Écouter les changements de settings pour mettre à jour le planning immédiatement
+        w.addEventListener('bme-settings-update', () => {
+            const timeContent = document.querySelector('.rbc-time-content');
+            if (timeContent) {
+                timeContent.removeAttribute('data-bme-cropped');
+                timeContent.removeAttribute('data-bme-crop-period');
+                cropPlanningToVisibleHours();
+            }
         });
     });
 
