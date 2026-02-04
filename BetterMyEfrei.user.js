@@ -496,12 +496,15 @@
             if (currentThumb) {
                 currentThumb.classList.remove('dragging');
             }
-            isDragging = false;
             currentThumb = null;
             document.removeEventListener('mousemove', handleDragMove);
             document.removeEventListener('mouseup', handleDragEnd);
             document.removeEventListener('touchmove', handleDragMove);
             document.removeEventListener('touchend', handleDragEnd);
+            // Retarder la remise à false de isDragging pour éviter que le click sur l'overlay ne ferme la popup
+            setTimeout(() => {
+                isDragging = false;
+            }, 50);
         }
 
         // Event listeners pour les thumbs
@@ -521,22 +524,8 @@
             overlay.classList.remove('open');
         }
 
-        // Exposer openSettings globalement pour le bouton du menu profil
-        w.bmeOpenSettings = openSettings;
-
-        overlay.querySelector('.bme-settings-close').addEventListener('click', closeSettings);
-        overlay.addEventListener('click', (e) => {
-            if (e.target === overlay) closeSettings();
-        });
-
-        // Bouton reset
-        document.getElementById('bme-btn-reset').addEventListener('click', () => {
-            tempSettings = JSON.parse(JSON.stringify(BME_DEFAULT_SETTINGS));
-            updateSliderUI();
-        });
-
-        // Bouton sauvegarder
-        document.getElementById('bme-btn-save').addEventListener('click', () => {
+        // Sauvegarder et fermer
+        function saveAndClose() {
             bmeSettings = JSON.parse(JSON.stringify(tempSettings));
             saveSettings(bmeSettings);
             closeSettings();
@@ -548,7 +537,33 @@
                 // Émettre un événement pour déclencher le re-crop
                 w.dispatchEvent(new CustomEvent('bme-settings-update', { detail: bmeSettings }));
             }
+        }
+
+        // Exposer openSettings globalement pour le bouton du menu profil
+        w.bmeOpenSettings = openSettings;
+
+        overlay.querySelector('.bme-settings-close').addEventListener('click', saveAndClose);
+        // Clic sur l'overlay (en dehors de la popup) - sauvegarder et fermer
+        // Mais ignorer si on est en train de drag (mouseup après drag)
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay && !isDragging) {
+                saveAndClose();
+            }
         });
+        // Empêcher la fermeture lors d'un mouseup après drag en dehors de la popup
+        overlay.addEventListener('mouseup', (e) => {
+            // Le isDragging sera remis à false par handleDragEnd, qui est appelé avant ce listener
+            // Donc on ne fait rien ici, c'est géré par le flag isDragging
+        });
+
+        // Bouton reset
+        document.getElementById('bme-btn-reset').addEventListener('click', () => {
+            tempSettings = JSON.parse(JSON.stringify(BME_DEFAULT_SETTINGS));
+            updateSliderUI();
+        });
+
+        // Bouton sauvegarder
+        document.getElementById('bme-btn-save').addEventListener('click', saveAndClose);
 
         // Mettre à jour le slider après ouverture (pour calculer les dimensions)
         setTimeout(updateSliderUI, 100);
