@@ -1,15 +1,15 @@
 // ==UserScript==
 // @name         Better MyEfrei
 // @namespace    https://www.myefrei.fr/
-// @version      0.5.2
+// @version      0.6.0
 // @description  Some improvements to MyEfrei UI!
-// @author       DocSystem & Doryan D. & Mathu_lmn & Mat15
+// @author       DocSystem & Doryan D. & Mathu_lmn & Mat15 & RemiVibert
 // @match        https://www.myefrei.fr/portal/student/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=www.myefrei.fr
 
 
-// @updateURL    https://github.com/DocSystem/BetterMyEfrei/raw/refs/heads/main/BetterMyEfrei.user.js
-// @downloadURL  https://github.com/DocSystem/BetterMyEfrei/raw/refs/heads/main/BetterMyEfrei.user.js
+// @updateURL    https://github.com/RemiVibert/BetterMyEfrei/raw/refs/heads/main/BetterMyEfrei.user.js
+// @downloadURL  https://github.com/RemiVibert/BetterMyEfrei/raw/refs/heads/main/BetterMyEfrei.user.js
 // @require      https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js
 // @resource     PDF_WORKER https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js
 // @grant        GM_getResourceText
@@ -407,19 +407,32 @@
             calendar.style.flexBasis = '700px';
         }
 
-        // --- Désactiver le scroll auto et fixer l'offset par défaut à 07:30 ---
-        function scrollTo0730OncePerPeriod() {
+        // === Better MyEfrei — Crop Planning (by RemiVibert) ===
+        // Affiche uniquement les heures entre 7h30 et 20h, sans scroll
+        // Configuration : ces valeurs pourront être personnalisables dans une future version
+        const BME_PLANNING_CONFIG = {
+            START_HOUR: 7,
+            END_HOUR: 20,
+            OFFSET_START: 30, // en minutes après START_HOUR (7h30)
+            OFFSET_END: 0     // en minutes après END_HOUR (20h00)
+        };
+
+        /**
+         * Crop le planning pour n'afficher que les heures entre 7h30 et 20h
+         * et supprime le scroll pour une vue complète sans défilement.
+         */
+        function cropPlanningToVisibleHours() {
             const timeContent = document.querySelector('.rbc-time-content');
             if (!timeContent) return;
 
-            // Clé de période (semaine/jour) : on lit le libellé d'en-tête pour ne pas reseter ton scroll à chaque micro-rendu
+            // Clé de période pour éviter de réappliquer inutilement
             const periodKey = document.querySelector('.label-date p')?.textContent?.trim()
                 || document.querySelector('.rbc-time-header-content')?.textContent?.trim()
                 || 'unknown-period';
 
-            // Si on a déjà positionné pour cette période, on ne retouche pas (respect du scroll manuel)
-            if (timeContent.getAttribute('data-bme-period-key') === periodKey &&
-                timeContent.getAttribute('data-bme-scrolled') === '1') {
+            // Si déjà traité pour cette période, on ne refait pas
+            if (timeContent.getAttribute('data-bme-crop-period') === periodKey &&
+                timeContent.getAttribute('data-bme-cropped') === '1') {
                 return;
             }
 
@@ -427,39 +440,55 @@
             const groups = gutter ? Array.from(gutter.querySelectorAll('.rbc-timeslot-group')) : [];
             if (!gutter || groups.length === 0) return;
 
-            // Trouver le bloc "7"
-            let idx7 = -1;
-            for (let i = 0; i < groups.length; i++) {
-                const lbl = groups[i].querySelector('.rbc-label')?.textContent?.trim();
-                if (lbl === '7') { idx7 = i; break; }
+            // Trouver les groupes de début (START_HOUR) et fin (END_HOUR)
+            let startGroup = null, endGroup = null;
+            for (const group of groups) {
+                const label = group.querySelector('.rbc-label')?.textContent?.trim();
+                if (label) {
+                    const hour = parseInt(label);
+                    if (hour === BME_PLANNING_CONFIG.START_HOUR) startGroup = group;
+                    if (hour === BME_PLANNING_CONFIG.END_HOUR) endGroup = group;
+                }
             }
 
-            // Calcul de la hauteur d'une heure
-            let hourTop = 0, hourHeight = 0;
-            if (idx7 >= 0) {
-                const g7 = groups[idx7];
-                const nextTop = (groups[idx7 + 1]?.offsetTop ?? (g7.offsetTop + g7.getBoundingClientRect().height));
-                hourTop = g7.offsetTop;
-                hourHeight = nextTop - g7.offsetTop;
-            } else {
-                // secours : distribution régulière si pas de label "7"
-                const totalH = gutter.scrollHeight;
-                hourHeight = totalH / 24;
-                hourTop = hourHeight * 7;
+            if (!startGroup || !endGroup) return;
+
+            // Calcul de la hauteur par heure (basé sur le premier groupe trouvé)
+            const groupHeight = startGroup.offsetHeight;
+            const pxPerMinute = groupHeight / 60;
+
+            // Calculer les offsets de début et fin
+            let startOffset = startGroup.offsetTop + (BME_PLANNING_CONFIG.OFFSET_START * pxPerMinute);
+            let endOffset = endGroup.offsetTop + (BME_PLANNING_CONFIG.OFFSET_END * pxPerMinute);
+
+            // Hauteur visible finale
+            const visibleHeight = endOffset - startOffset;
+
+            // Appliquer le crop : fixer la hauteur et masquer le dépassement
+            const applyStyles = () => {
+                timeContent.style.height = visibleHeight + 'px';
+                timeContent.style.minHeight = visibleHeight + 'px';
+                timeContent.style.maxHeight = visibleHeight + 'px';
+                timeContent.style.overflowY = 'hidden';
+                timeContent.scrollTop = startOffset;
+            };
+
+            // Appliquer immédiatement et après un court délai pour contrer React
+            applyStyles();
+            setTimeout(applyStyles, 50);
+            setTimeout(applyStyles, 150);
+
+            // Ajuster également le conteneur parent si présent
+            const parentContainer = timeContent.closest('.sc-jnWwQn, .omXKR');
+            if (parentContainer) {
+                parentContainer.style.height = visibleHeight + 'px';
+                parentContainer.style.minHeight = visibleHeight + 'px';
+                parentContainer.style.maxHeight = visibleHeight + 'px';
             }
 
-            // 07:30 => + 0.5 * heure
-            const target = Math.max(0, hourTop + hourHeight * 0.5);
-
-            // Plusieurs passes rapides pour contrer un éventuel scroll ultérieur de React
-            const apply = () => { timeContent.scrollTop = target; };
-            apply();
-            setTimeout(apply, 50);
-            setTimeout(apply, 150);
-
-            // Marqueurs pour ne pas re-scroller pendant cette période
-            timeContent.setAttribute('data-bme-period-key', periodKey);
-            timeContent.setAttribute('data-bme-scrolled', '1');
+            // Marquer comme traité
+            timeContent.setAttribute('data-bme-crop-period', periodKey);
+            timeContent.setAttribute('data-bme-cropped', '1');
         }
 
         // Initial pass on already-present events
@@ -467,13 +496,13 @@
 
         // Initial global calendar processing
         processCalendar();
-        scrollTo0730OncePerPeriod();
+        cropPlanningToVisibleHours();
 
         // Efficiently handle only NEW nodes
         const calendarObserver = new MutationObserver((mutationList) => {
             // Process calendar globally
             processCalendar();
-            scrollTo0730OncePerPeriod();
+            cropPlanningToVisibleHours();
 
             for (const m of mutationList) {
                 // Only interested in added nodes

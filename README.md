@@ -8,7 +8,7 @@ UI/UX tweaks for MyEfrei
 3. Left-click "Manage Extension."
 4. Enable "Developer Mode."
 5. Enable "Allow user scripts."
-6. **One-click install**: Click this link to Install Better MyEfrei directly: [**Install Better MyEfrei**](https://github.com/DocSystem/BetterMyEfrei/raw/refs/heads/main/BetterMyEfrei.user.js)
+6. **One-click install**: Click this link to Install Better MyEfrei directly: [**Install Better MyEfrei**](https://github.com/RemiVibert/BetterMyEfrei/raw/refs/heads/main/BetterMyEfrei.user.js)
 
    TamperMonkey will automatically detect the userscript and prompt you to Install it.
 8. Refresh the [myefrei.fr](https://myefrei.fr) webpage.
@@ -22,6 +22,7 @@ UI/UX tweaks for MyEfrei
   - Better colors
   - Show course type on planning page, without clicking on the course
   - Better course modal
+  - **Cropped schedule view** (by @RemiVibert): Display only hours between 7:30 AM and 8:00 PM without scrolling
 - Better Grades
   - Modern card-based layout for modules
   - Automatic average and ECTS tracking
@@ -31,3 +32,10 @@ UI/UX tweaks for MyEfrei
     - Booklet mode reordering (A3 format)
     - Dark/Light mode compatible
 - Show main contact on home page
+
+## Fork by RemiVibert
+
+This fork adds the following feature:
+- **Cropped Planning View**: The schedule is no longer scrollable and displays fully visible, showing only the hours between 7:30 AM and 8:00 PM. This makes it easier to see the entire day at a glance without scrolling.
+
+> Note: A customization menu for this feature is planned for a future version.
