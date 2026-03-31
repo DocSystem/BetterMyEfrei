@@ -19,6 +19,7 @@
 // @grant        GM_xmlhttpRequest
 // @grant        unsafeWindow
 // @connect      cdnjs.cloudflare.com
+// @connect      ru-efrei-api.mariam.app
 // ==/UserScript==
 
 (function () {
@@ -2491,6 +2492,84 @@
                         `;
                         contactDiv.appendChild(contactCard);
                         aside.prepend(contactDiv);
+
+                        // === Menu du restaurant (MARIAM API) ===
+                        const menuDiv = document.createElement('div');
+                        menuDiv.setAttribute('class', aside.querySelector('.MuiBox-root').getAttribute('class'));
+                        const menuCard = document.createElement('div');
+                        menuCard.setAttribute('class', aside.querySelector('.MuiBox-root').children[0].getAttribute('class'));
+                        menuDiv.appendChild(menuCard);
+                        contactDiv.insertAdjacentElement('afterend', menuDiv);
+
+                        let activeMenuTab = 'today';
+
+                        function gmFetch(url) {
+                            return new Promise((resolve) => {
+                                GM_xmlhttpRequest({
+                                    method: 'GET',
+                                    url,
+                                    onload: (r) => { try { resolve(JSON.parse(r.responseText)); } catch (e) { resolve(null); } },
+                                    onerror: () => resolve(null),
+                                });
+                            });
+                        }
+
+                        function renderMenuCard(todayData, tomorrowData) {
+                            const data = activeMenuTab === 'today' ? todayData : tomorrowData;
+                            const catOrder = ['entree', 'plat', 'vg', 'dessert'];
+                            const catLabels = { entree: 'Entrée', plat: 'Plat principal', dessert: 'Dessert', vg: 'Option végé' };
+                            const brand = '#173767';
+
+                            const tabBase = 'flex:1;padding:6px 0;border:none;background:transparent;cursor:pointer;font-size:12px;font-family:inherit;';
+                            const activeTab = tabBase + `color:${brand};font-weight:600;border-bottom:2px solid ${brand};`;
+                            const inactiveTab = tabBase + 'color:#888;border-bottom:2px solid #e0e0e0;';
+
+                            const byCategory = data?.menu?.by_category;
+                            const hasItems = byCategory && catOrder.some(k => byCategory[k]?.length > 0);
+
+                            const items = hasItems
+                                ? catOrder
+                                    .filter(cat => byCategory[cat]?.length > 0)
+                                    .map(cat => `
+                                        <div style="margin-top:10px;">
+                                            <div style="font-size:10px;font-weight:700;letter-spacing:.09em;color:${brand};text-transform:uppercase;margin-bottom:5px;">${catLabels[cat] || cat}</div>
+                                            ${byCategory[cat].map(item => `
+                                                <div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid #f0f0f0;">
+                                                    <span style="display:inline-block;width:5px;height:5px;border-radius:50%;background:${brand};flex-shrink:0;"></span>
+                                                    <span style="font-size:13px;line-height:1.3;">${item.name}</span>
+                                                </div>
+                                            `).join('')}
+                                        </div>`).join('')
+                                : '<p style="color:#888;font-size:12px;margin:8px 0;">Menu non disponible</p>';
+
+                            menuCard.innerHTML = `
+                                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0;">
+                                    <h2 class="sc-bczRLJ hYoPWi MuiTypography-root MuiTypography-h2" style="margin:0;">Menu du Crous</h2>
+                                    <a href="https://efrei.mariam.app/menu" target="_blank" rel="noopener" title="Voir sur MARIAM" style="display:flex;align-items:center;gap:3px;color:#aaa;font-size:10px;text-decoration:none;flex-shrink:0;" onmouseover="this.style.color='#173767'" onmouseout="this.style.color='#aaa'">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                                    </a>
+                                </div>
+                                <div style="display:flex;margin-bottom:6px;">
+                                    <button data-menutab="today" style="${activeMenuTab === 'today' ? activeTab : inactiveTab}">Aujourd'hui</button>
+                                    <button data-menutab="tomorrow" style="${activeMenuTab === 'tomorrow' ? activeTab : inactiveTab}">Demain</button>
+                                </div>
+                                <div style="overflow-y:auto;max-height:340px;">${items}</div>
+                            `;
+
+                            menuCard.querySelectorAll('[data-menutab]').forEach(btn => {
+                                btn.addEventListener('click', () => {
+                                    activeMenuTab = btn.dataset.menutab;
+                                    renderMenuCard(todayData, tomorrowData);
+                                });
+                            });
+                        }
+
+                        Promise.all([
+                            gmFetch('https://ru-efrei-api.mariam.app/v1/menus/today'),
+                            gmFetch('https://ru-efrei-api.mariam.app/v1/menus/tomorrow'),
+                        ]).then(([todayResp, tomorrowResp]) => {
+                            renderMenuCard(todayResp || null, tomorrowResp || null);
+                        });
                     });
                 }
             }
