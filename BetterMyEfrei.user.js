@@ -1,4 +1,4 @@
-﻿// ==UserScript==
+// ==UserScript==
 // @name         Better MyEfrei
 // @namespace    https://www.myefrei.fr/
 // @version      0.7.0
@@ -2564,6 +2564,25 @@
     margin: 0;
   }
 
+  .bme-moodle-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #fff3e5;
+    color: #f98012;
+    padding: 2px 10px;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 0.8rem;
+    font-weight: 600;
+    border: 1px solid #f98012;
+    transition: all 0.2s ease;
+  }
+  .bme-moodle-btn:hover {
+    background: #f98012;
+    color: #ffffff;
+  }
+
   /* Grille 3x2 */
   .bme-grid {
     display: grid;
@@ -2842,6 +2861,31 @@
         modalObserver.observe(document.documentElement, { childList: true, subtree: true });
     });
 
+    // --- Moodle Integration ---
+    let moodleSpacesCache = null;
+    let moodleSpacesPromise = null;
+    function getMoodleSpaces() {
+        if (moodleSpacesCache) return Promise.resolve(moodleSpacesCache);
+        if (moodleSpacesPromise) return moodleSpacesPromise;
+        const date = new Date();
+        const year = date.getMonth() >= 7 ? date.getFullYear() : date.getFullYear() - 1;
+        const schoolYear = `${year}-${year + 1}`;
+        console.log('BME: Fetching Moodle spaces for schoolYear', schoolYear);
+        moodleSpacesPromise = fetch(`https://www.myefrei.fr/api/rest/student/courses/spaces?schoolYear=${schoolYear}`)
+            .then(res => res.json())
+            .then(data => {
+                moodleSpacesCache = Array.isArray(data) ? data : (data || []);
+                console.log('BME: Fetched Moodle spaces array size:', moodleSpacesCache.length);
+                return moodleSpacesCache;
+            })
+            .catch(e => {
+                console.error('BME: Failed to fetch Moodle spaces', e);
+                moodleSpacesCache = [];
+                return moodleSpacesCache;
+            });
+        return moodleSpacesPromise;
+    }
+
     function enhanceModal(modal, closeBtn) {
         if (modal.getAttribute('data-bme-modal') === '1') return;
         modal.setAttribute('data-bme-modal', '1');
@@ -2936,6 +2980,44 @@
         codeP.className = 'bme-code';
         codeP.textContent = moduleId;
         header.appendChild(codeP);
+
+        const titleText = titleEl ? titleEl.textContent.trim() : '';
+
+        if (moduleId || titleText) {
+            console.log('BME: Extracted moduleId:', moduleId, '| title:', titleText);
+            getMoodleSpaces().then(spaces => {
+                let space = null;
+                const searchId = moduleId ? moduleId.toUpperCase() : null;
+                const searchName = titleText ? titleText.toLowerCase() : null;
+                
+                if (searchId) {
+                    space = spaces.find(s => (s.code || '').toUpperCase() === searchId);
+                }
+                
+                // Fallback to name matching if code didn't match or was absent
+                if (!space && searchName) {
+                    space = spaces.find(s => {
+                        const sname = (s.name || '').toLowerCase();
+                        return sname === searchName || searchName.includes(sname) || sname.includes(searchName);
+                    });
+                }
+                
+                if (space && space.link) {
+                    console.log('BME: Found corresponding Moodle space:', space);
+                    const moodleBtn = document.createElement('a');
+                    moodleBtn.href = space.link;
+                    moodleBtn.target = '_blank';
+                    moodleBtn.title = 'Aller sur Moodle';
+                    moodleBtn.className = 'bme-moodle-btn';
+                    moodleBtn.innerHTML = `<svg style="flex-shrink:0" width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/></svg> Moodle`;
+                    headerTop.appendChild(moodleBtn);
+                } else {
+                    console.log('BME: No Moodle space link found for', searchId, 'or', searchName);
+                }
+            });
+        } else {
+            console.log('BME: No moduleId or title could be extracted for this modal.');
+        }
 
         // Masquer toute occurrence originale du code module
         Array.from(modal.querySelectorAll('.MuiTypography-root, p, span, div'))
