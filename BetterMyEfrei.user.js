@@ -1,7 +1,7 @@
 ﻿// ==UserScript==
 // @name         Better MyEfrei
 // @namespace    https://www.myefrei.fr/
-// @version      0.7.1
+// @version      0.7.2
 // @description  Some improvements to MyEfrei UI!
 // @author       DocSystem & Doryan D. & Mathu_lmn & Mat15 & RemiVibert
 // @match        https://www.myefrei.fr/portal/student/*
@@ -2991,15 +2991,32 @@
                 const searchName = titleText ? titleText.toLowerCase() : null;
                 
                 if (searchId) {
+                    // Exact match
                     space = spaces.find(s => (s.code || '').toUpperCase() === searchId);
+                    
+                    // Fallback match: if planning code has trailing identifiers like "M"
+                    // ex: ST2ML2-2526PSP01M (planning) matches ST2ML2-2526PSP01 (moodle API)
+                    if (!space) {
+                        space = spaces.find(s => {
+                            const scode = (s.code || '').toUpperCase();
+                            return scode && searchId.startsWith(scode);
+                        });
+                    }
                 }
                 
                 // Fallback to name matching if code didn't match or was absent
                 if (!space && searchName) {
-                    space = spaces.find(s => {
-                        const sname = (s.name || '').toLowerCase();
-                        return sname === searchName || searchName.includes(sname) || sname.includes(searchName);
-                    });
+                    // Try exact name match first
+                    space = spaces.find(s => (s.name || '').toLowerCase() === searchName);
+                    
+                    // If still no match, do relaxed matching prioritizing longer (more specific) names
+                    if (!space) {
+                        const sortedSpaces = [...spaces].sort((a, b) => (b.name || '').length - (a.name || '').length);
+                        space = sortedSpaces.find(s => {
+                            const sname = (s.name || '').toLowerCase();
+                            return sname && (searchName.includes(sname) || sname.includes(searchName));
+                        });
+                    }
                 }
                 
                 if (space && space.link) {
